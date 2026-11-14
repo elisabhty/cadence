@@ -706,3 +706,42 @@ html.sheet-open #bar{opacity:0}
 .hab-cadi{display:flex;justify-content:center;margin:2px 0 -6px}
 .alert.with-cadi{align-items:center}
 .alert.with-cadi>.cadi{margin:-4px -2px -4px -6px}
+
+/* =========================================================
+   Ma cadence : série d'injections en rythme (chaîne de perles)
+   ========================================================= */
+.streak{display:block;width:100%;text-align:left;padding:14px 16px 15px;margin-top:12px;transition:transform .12s}
+button.streak:active{transform:scale(.985)}
+.streak .top{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:600;color:var(--inj)}
+.streak .top .ic{width:20px;height:20px}
+.streak .rec{margin-left:auto;font-size:13px;color:var(--label2);font-weight:500}
+.streak .big{display:flex;align-items:baseline;gap:8px;margin:6px 0 12px;flex-wrap:wrap}
+.streak .big b{font-family:var(--round);font-size:40px;font-weight:800;line-height:1;letter-spacing:-.02em}
+.streak .big>span{font-size:15px;color:var(--label2);font-weight:500}
+.streak.paused .big b{font-size:28px;color:var(--label2)}
+.streak .sub2{font-size:15px;color:var(--label2);line-height:1.4;margin:6px 0 12px}
+.chain{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.chain i{flex:1 1 0;min-width:14px;max-width:34px;height:13px;border-radius:7px;background:var(--inj)}
+.chain i.late{background:var(--ress)}
+.chain i.old{opacity:.3}
+.chain i.ghost{background:var(--fill)}
+.chain i.next{background:transparent;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--inj) 55%,transparent);animation:breathe 2.4s ease-in-out infinite}
+.chain i.next.wait{box-shadow:inset 0 0 0 2px var(--ress);animation:breathe 1.2s ease-in-out infinite}
+.chain .brk{flex:none;width:2px;height:18px;border-radius:1px;background:var(--label3);margin:0 4px}
+.page.anim .chain i:not(.next){animation:popin .4s cubic-bezier(.3,1.6,.5,1) both}
+.chain i.new{animation:popin .6s .35s cubic-bezier(.3,1.7,.5,1) both!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--inj) 25%,transparent)}
+.streak .hbar i{background:var(--inj)}
+.streak .ms{display:block;margin-top:10px;font-size:14px;color:var(--label2);line-height:1.4}
+.streak .ms b{color:var(--label);font-weight:600}
+.streak .ms.wait{color:var(--ress);font-weight:500}
+.streak .legend2{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;font-size:12.5px;color:var(--label2)}
+.streak .legend2 i{display:inline-block;width:16px;height:9px;border-radius:5px;margin-right:5px;vertical-align:0;background:var(--inj)}
+.streak .legend2 i.late{background:var(--ress)}
+.streak .legend2 i.brk2{width:2px;height:12px;border-radius:1px;background:var(--label3);vertical-align:-2px}
+.streak .badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.streak .badges span{height:30px;padding:0 11px;border-radius:15px;background:var(--fill);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:5px;color:var(--label2)}
+.streak .badges span.on{background:color-mix(in srgb,var(--inj) 14%,transparent);color:var(--inj)}
+.streak .badges .ic{width:14px;height:14px;stroke-width:3}
+.page.anim .streak .badges span.on{animation:popin .45s .5s cubic-bezier(.3,1.6,.5,1) both}
+.streak .sumrow>span b{font-family:var(--round)}
+.streak .sumrow>span>span{display:block;font-size:12.5px;color:var(--label2)}

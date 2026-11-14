@@ -244,6 +244,7 @@ const IC = {
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".9"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/>',
+  cadence: '<path d="M4.6 15.6a8.5 8.5 0 0 1 2.6-5.2M10.2 8.3a8.5 8.5 0 0 1 3.6 0M16.8 10.4a8.5 8.5 0 0 1 2.6 5.2" stroke-width="2.8"/>',
   print: '<path d="M7 9V3.5h10V9"/><rect x="3.5" y="9" width="17" height="8" rx="2"/><path d="M7 14h10v6.5H7z"/>'
 };
 const ic = (n, c = '') => `<svg class="ic ${c}" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
@@ -420,6 +421,59 @@ function effectStats(t, days = 120) {
   return { rows, n };
 }
 
+/* ---------- Cadence : série d'injections en rythme ---------- */
+function cadenceOf(t) {
+  const inj = injOf(t.id).slice().reverse(), n = interval(t);
+  const tolOn = Math.floor(n / 7), tolLate = n === 1 ? 0 : Math.max(1, Math.round(n * .57));
+  const marks = []; let cur = 0, best = 0, ok = 0, late = 0;
+  inj.forEach((i, k) => {
+    if (k === 0) { cur = 1; marks.push({ i, kind: 'ok' }); ok++; }
+    else {
+      const g = daysBetween(inj[k - 1].date, i.date);
+      if (g === 0) return;                                   // deux saisies le même jour : on n'en compte qu'une
+      if (g - n > tolLate) { cur = 1; marks.push({ i, kind: 'ok', brk: true }); ok++; }
+      else { cur++; const lt = g - n > tolOn; marks.push({ i, kind: lt ? 'late' : 'ok' }); lt ? late++ : ok++; }
+    }
+    best = Math.max(best, cur);
+  });
+  const st = status(t); let state = inj.length ? 'ok' : 'none';
+  if (st.last) { const over = -st.dueIn; if (over > tolLate) state = 'paused'; else if (over > tolOn) state = 'waiting'; }
+  return { cur: state === 'paused' ? 0 : cur, best, marks, n, state, ok, late, tolOn, tolLate };
+}
+function milestonesOf(n) {
+  const L = [[7, '1 semaine'], [28, '1 mois'], [56, '2 mois'], [91, '3 mois'], [182, '6 mois'], [365, '1 an']];
+  return L.map(([d, l]) => ({ count: Math.round(d / n), label: l })).filter(m => m.count >= 2);
+}
+function streakCard(t, full) {
+  const c = cadenceOf(t), ms = milestonesOf(c.n), next = ms.find(m => m.count > c.cur), k = 'streak:' + t.id, was = PREV.get('sc:' + t.id); PREV.set('sc:' + t.id, c.cur);
+  if (c.state === 'none') return `<button class="card streak" data-act="newInj" data-id="${t.id}"><span class="top">${ic('cadence')}Ma cadence</span><p class="sub2">Ta série démarre à ta première injection notée. Chaque injection faite à temps ajoute une perle.</p><span class="chain">${Array.from({ length: 8 }, (_, i) => `<i class="${i === 0 ? 'next' : 'ghost'}"></i>`).join('')}</span></button>`;
+  const show = c.marks.slice(-(full ? 60 : 9));
+  let chain = '', inStreak = c.marks.length - (c.state === 'paused' ? c.marks.length : c.cur);
+  show.forEach((m, i) => {
+    const idx = c.marks.length - show.length + i, old = idx < inStreak;
+    if (m.brk && i > 0) chain += '<span class="brk" aria-hidden="true"></span>';
+    const isNew = was !== undefined && c.cur > was && idx === c.marks.length - 1;
+    chain += `<i class="${m.kind}${old ? ' old' : ''}${isNew ? ' new' : ''}" style="animation-delay:${i * 45}ms" title="${dfmt(m.i.date, { day: 'numeric', month: 'long' })}${m.kind === 'late' ? ', décalée' : ''}"></i>`;
+  });
+  if (!full) chain += `<i class="next${c.state === 'waiting' ? ' wait' : ''}" title="Prochaine injection"></i>`;
+  const pct = next ? Math.min(100, c.cur / next.count * 100) : 100;
+  let msg;
+  if (c.state === 'paused') msg = `Ta série est en pause. Pas de souci : elle repart à ta prochaine injection${c.best ? `, et ton record de ${c.best} reste là` : ''}.`;
+  else if (c.state === 'waiting') msg = `Ta cadence t’attend : injection prévue ${relDay(new Date(status(t).due))}.`;
+  else msg = next ? `Encore <b>${next.count - c.cur}</b> injection${next.count - c.cur > 1 ? 's' : ''} pour <b>${next.label}</b> en rythme.` : `Plus d’un an en rythme. Chapeau ✨`;
+  const earned = ms.filter(m => c.best >= m.count);
+  return `<${full ? 'div' : 'button'} class="card streak${c.state === 'paused' ? ' paused' : ''}"${full ? '' : ` data-act="streak" data-id="${t.id}"`}>
+    <span class="top">${ic('cadence')}Ma cadence${c.best ? `<span class="rec">Record : ${c.best}</span>` : ''}</span>
+    <span class="big"><b>${c.state === 'paused' ? 'En pause' : cnt(k, c.cur, 'int', animIn ? 0 : undefined)}</b>${c.state === 'paused' ? '' : `<span>injection${c.cur > 1 ? 's' : ''} en rythme d’affilée</span>`}</span>
+    <span class="chain">${chain}</span>
+    ${next && c.state !== 'paused' ? `<span class="hbar" style="display:block;margin-top:14px"><i data-wk="${k}" data-w="${pct.toFixed(1)}" style="width:${pct.toFixed(0)}%"></i></span>` : ''}
+    <span class="ms${c.state === 'waiting' ? ' wait' : ''}">${msg}</span>
+    ${full ? `<span class="legend2"><span><i class="ok"></i>En rythme</span><span><i class="late"></i>Décalée de quelques jours</span><span><i class="brk2"></i>Série interrompue</span></span>
+      <span class="badges">${ms.map(m => `<span class="${c.best >= m.count ? 'on' : ''}">${c.best >= m.count ? ic('check') : ''}${m.label}</span>`).join('')}</span>
+      <span class="sumrow" style="margin-top:14px"><span><b>${c.cur}</b><span>série actuelle</span></span><span><b>${c.best}</b><span>record</span></span><span><b>${c.ok + c.late ? Math.round(c.ok / (c.ok + c.late) * 100) : 0} %</b><span>à l’heure</span></span></span>` : ''}
+  </${full ? 'div' : 'button'}>`;
+}
+
 /* ---------- Tracés ---------- */
 function mono(p) {
   const n = p.length; if (!n) return '';
@@ -533,6 +587,7 @@ function vHome() {
   const t = T(focusT), st = status(t);
   if (act.length > 1) h += `<div class="seg" style="margin-bottom:12px">${act.map(x => `<button data-focus="${x.id}" aria-pressed="${x.id === focusT}">${esc(x.name)}</button>`).join('')}</div>`;
   h += hero(t, st);
+  h += streakCard(t);
   h += homeAlerts(t, st);
   h += habitsCard();
   h += `<div class="grid">${tileWeight()}${tileLevel(t, st)}${tileFeel()}${tilePen(t, st)}</div>`;
@@ -718,6 +773,7 @@ function vProgress() {
     if (num(t.halfLifeH) > 0 && inj.length) h += `<div class="card chart-card" style="--c:${esc(t.color)}">${levelChart(t)}<p class="foot-note" style="margin:10px 0 0">Courbe théorique calculée avec une demi-vie de ${fr(t.halfLifeH, 0)} h. Elle ne reflète pas ton taux réel.</p></div>`;
     if (inj.length) h += `<p class="lab">Paliers de dose</p><div class="group">${steps(t).reverse().map((s, i) => `<div class="row"><span class="t"><b class="num" style="font-size:17px">${fmtDose(s.dose, esc(t.unit))}</b><span>${i === 0 ? 'Depuis le' : 'À partir du'} ${dfmt(s.from, { day: 'numeric', month: 'long' })}</span></span><span style="font-size:15px;color:var(--label2)">${s.n} injection${s.n > 1 ? 's' : ''}</span></div>`).join('')}</div>`;
     else h += `<div class="card empty">${cadi({ size: 72, done: 0 })}<b>Aucune injection notée</b><p>Le niveau estimé et tes paliers de dose apparaîtront ici.</p><button class="btn" data-act="newInj" data-id="${t.id}">Noter une injection</button></div>`;
+    if (inj.length) h += `<p class="lab" id="cadence-sec">Ma cadence</p>${streakCard(t, true)}`;
     h += effectsByDay(t);
   }
   h += habitsHistory();
@@ -1477,6 +1533,7 @@ const A = {
     if (cadiTaps % 3 === 0) { el.dataset.after = ex; say(tx, el.dataset.expr); } else say(tx, ex);
   },
   cadiPoke(id, el) { haptic(); cadiSpin(el); },
+  streak(id) { tabDir = 1; tab = 'progress'; animIn = true; tabPop = true; focusT = id; render(); setTimeout(() => { const e = $('#cadence-sec'); if (e) scrollTo({ top: e.getBoundingClientRect().top + scrollY - 70, behavior: REDUCED ? 'auto' : 'smooth' }); }, 60); },
   replayRing(id) { PREV.delete('ring:' + id); PREV.delete('late:' + id); firstHome = true; haptic(); render(); },
   quickW(id, el) { const pt = center(el), bub = center(el && el.closest('.hab') && el.closest('.hab').querySelector('.bubble')); pop(el, 1.2); haptic(); const it = addIntake('w', 250, 'Verre'); render(); floatText(pt, '+250 mL', 'var(--eau)'); toast(`${habFmt('w', intake('w'))} d’eau aujourd’hui`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); goalCheck(it, bub || pt); },
   quickS(id, el) { const pt = center(el), bub = center(el && el.closest('.hab') && el.closest('.hab').querySelector('.bubble')); pop(el, 1.2); haptic(); const it = addIntake('s', 1, 'Séance de renforcement'); render(); floatText(pt, '+1 séance', 'var(--renfo)'); toast(`${sessionsWeek()} séance${sessionsWeek() > 1 ? 's' : ''} cette semaine`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); goalCheck(it, bub || pt); },
@@ -1488,7 +1545,8 @@ const A = {
     save(); closeSheet(); render(); toast('Objectifs enregistrés');
   },
   saveInj() {
-    const tid = q('#i-t').value, typed = num(q('#i-dose').value), pill = q('#i-pills') ? num(q('#i-pills').dataset.v) : NaN;
+    const tid0 = q('#i-t').value, before = cadenceOf(T(tid0));
+    const tid = tid0, typed = num(q('#i-dose').value), pill = q('#i-pills') ? num(q('#i-pills').dataset.v) : NaN;
     const dose = typed > 0 ? typed : pill, date = q('#i-date').value;
     if (!(dose > 0)) return toast('Choisis la dose injectée', true);
     if (!date) return toast('Indique la date', true);
@@ -1496,6 +1554,8 @@ const A = {
     const t = T(tid); if (t.stock !== '' && t.stock != null) t.stock = Math.max(0, num(t.stock) - 1);
     advancePen(t, date);
     focusT = tid; save(); closeSheet(); firstHome = true; PREV.delete('ring:' + tid);
+    const after = cadenceOf(t), hit = milestonesOf(after.n).filter(m => (before.state === 'paused' ? 0 : before.cur) < m.count && after.cur >= m.count).pop();
+    if (hit) setTimeout(() => { hud(`${cap(hit.label)} en rythme !`, 'var(--inj)', { cadi: true, expr: 'party', spin: false, sub: `${after.cur} injections à temps d’affilée` }); burst({ x: innerWidth / 2, y: innerHeight * .42 }, ['var(--inj)', '#FFD60A', 'var(--prot)', '#FFFFFF'], 46, 1.9); }, REDUCED ? 900 : 2300);
     const p = penInfo(t);
     hud('Injection notée', t.color, { cadi: true, expr: 'excited', n: interval(t), sub: p ? `Dose ${p.used} sur ${p.per} du stylo` : `Prochaine ${relDay(new Date(D(date).getTime() + interval(t) * DAY))}` });
     setTimeout(() => { if (tab !== 'home') { tabDir = -1; tab = 'home'; tabPop = true; renderTabs(); } render(); scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' }); }, REDUCED ? 0 : 380);
