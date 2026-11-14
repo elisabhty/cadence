@@ -87,17 +87,73 @@ function burst(pt, colors, n = 26, spread = 1.15) {
     s.animate([{ transform: 'translate(-50%,-50%) scale(.4) rotate(0deg)', opacity: 1 }, { transform: `translate(calc(-50% + ${dx * .7}px), calc(-50% + ${dy * .7}px)) scale(1) rotate(${Math.random() * 360}deg)`, opacity: 1, offset: .45 }, { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy + 70 * spread}px)) scale(.8) rotate(${Math.random() * 720 - 360}deg)`, opacity: 0 }], { duration: 900 + Math.random() * 500, easing: 'cubic-bezier(.2,.7,.3,1)' }).onfinish = () => s.remove();
   }
 }
-function hud(text, color) {
+function hud(text, color, o = {}) {
   const h = document.createElement('div'); h.className = 'hud'; h.style.setProperty('--c', color);
-  h.innerHTML = `<div class="hud-in"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30"/><path d="M19 33l9 9 18-19"/></svg><b>${esc(text)}</b></div>`;
+  const top = o.cadi ? `<span class="hud-cadi">${cadi({ size: 112, n: o.n || 7, done: o.n || 7, act: '', cls: 'hudc' })}<span class="hud-ok">${ic('check')}</span></span>`
+    : `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30"/><path d="M19 33l9 9 18-19"/></svg>`;
+  h.innerHTML = `<div class="hud-in${o.cadi ? ' with-cadi' : ''}">${top}<b>${esc(text)}</b>${o.sub ? `<span class="hsub">${esc(o.sub)}</span>` : ''}</div>`;
   document.body.appendChild(h); haptic();
-  setTimeout(() => h.classList.add('out'), REDUCED ? 700 : 1150); setTimeout(() => h.remove(), REDUCED ? 800 : 1550);
+  if (o.cadi) setTimeout(() => cadiSpin(h.querySelector('.cadi')), 120);
+  const d = o.cadi ? 1700 : 1150;
+  setTimeout(() => h.classList.add('out'), REDUCED ? 800 : d); setTimeout(() => h.remove(), REDUCED ? 900 : d + 400);
 }
 function collapse(el, cb) {
   if (!el || REDUCED || !el.animate) return cb();
   const h = el.offsetHeight; el.style.overflow = 'hidden';
   el.animate([{ height: h + 'px', opacity: 1, transform: 'translateX(0)' }, { height: h + 'px', opacity: 0, transform: 'translateX(-24px)', offset: .55 }, { height: '0px', opacity: 0, paddingTop: '0px', paddingBottom: '0px', marginTop: '0px', marginBottom: '0px' }], { duration: 300, easing: 'ease-in', fill: 'forwards' }).onfinish = cb;
 }
+/* ---------- Cadi, la mascotte ---------- */
+function haloSvg(n = 7, done = 5, cur = -1, late = false) {
+  n = Math.max(1, Math.min(Math.round(n) || 7, 14));
+  const step = n > 9 ? 11.5 : 16, span = (n - 1) * step, R = 33, cx = 50, cy = 36.8, pw = Math.min(8.6, R * step * Math.PI / 180 * .9);
+  let r = '';
+  for (let i = 0; i < n; i++) {
+    const deg = -90 - span / 2 + i * step, a = deg * Math.PI / 180, x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+    const cls = late ? 'l' : i < done ? 'd' : i === cur ? 'c' : '';
+    r += `<g transform="rotate(${(deg + 90).toFixed(1)} ${x.toFixed(2)} ${y.toFixed(2)})"><rect class="${cls}" x="${(x - pw / 2).toFixed(2)}" y="${(y - 2.7).toFixed(2)}" width="${pw.toFixed(2)}" height="5.4" rx="2.7" style="--i:${i}"/></g>`;
+  }
+  return `<svg class="cadi-h" viewBox="0 0 100 100" aria-hidden="true">${r}</svg>`;
+}
+function cadi({ size = 64, n = 7, done = 5, cur = -1, late = false, mood = '', act = 'cadiPoke', cls = '' } = {}) {
+  return `<span class="cadi ${mood} ${cls}" style="--s:${size}px"${act ? ` data-act="${act}"` : ''} role="img" aria-label="Cadi, la mascotte de Cadence"><span class="cadi-b"><img class="still" src="cadi.png" alt="" draggable="false"><span class="spin"><img src="cadi-spin.webp" alt="" draggable="false"></span></span>${haloSvg(n, done, cur, late)}</span>`;
+}
+function cadiFor(t, size = 60) {
+  if (!t) return cadi({ size, act: 'cadi' });
+  const st = status(t);
+  if (!st.last) return cadi({ size, n: interval(t), done: 0, cur: 0, act: 'cadi' });
+  const late = st.dueIn < 0, due = st.dueIn === 0, n = st.n;
+  return cadi({ size, n, done: late || due ? n : Math.min(st.elapsed, n), cur: late || due ? -1 : st.elapsed, late, mood: late ? 'late' : due ? 'due' : '', act: 'cadi' });
+}
+function cadiSpin(el) {
+  if (!el || REDUCED) return;
+  el.classList.remove('spinning', 'jelly'); void el.offsetWidth; el.classList.add('spinning');
+  const img = el.querySelector('.spin img'); img.addEventListener('animationend', () => el.classList.remove('spinning'), { once: true });
+}
+function cadiJelly(el) { if (!el || REDUCED) return; el.classList.remove('jelly'); void el.offsetWidth; el.classList.add('jelly'); setTimeout(() => el.classList.remove('jelly'), 700); }
+let cadiTaps = 0, sayTimer;
+function say(text) {
+  const b = $('#say'); if (!b) return;
+  b.hidden = false; b.classList.remove('out'); b.textContent = text; void b.offsetWidth; b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
+  clearTimeout(sayTimer); sayTimer = setTimeout(hideSay, 5200);
+}
+function hideSay() { const b = $('#say'); if (!b || b.hidden) return; b.classList.add('out'); setTimeout(() => { b.hidden = true; b.classList.remove('out'); }, 250); }
+function cadiTips() {
+  const tips = [], t = T(focusT) || active()[0], st = t ? status(t) : null, g = S.goals, h = new Date().getHours();
+  if (t && st && st.last && st.dueIn === 0) tips.push(`C’est le jour J ! Zone conseillée : ${siteLabel(rotation(t.id).next).toLowerCase()}.`);
+  if (t && st && st.last && st.dueIn < 0) tips.push(`Ton injection était prévue ${relDay(new Date(st.due))}. En cas de doute, la notice et ton pharmacien sont là.`);
+  if (t && st && !st.last) tips.push('Note ta première injection et je lance le compte à rebours.');
+  const p = t && penInfo(t); if (p && p.exp && p.expIn >= 0 && p.expIn <= 3 && !p.done) tips.push(`Ton stylo est à jeter ${relDay(p.exp)}.`);
+  if (S.appt && daysBetween(today(), S.appt) >= 0 && daysBetween(today(), S.appt) <= 7) tips.push(`Rendez-vous ${relDay(S.appt)}. Tes questions sont prêtes ?`);
+  const allOk = ['p', 'w', 'f'].every(k => !(g[k] > 0) || intake(k) >= g[k]);
+  if (allOk && S.intake.some(i => i.date === today())) tips.push('Objectifs du jour atteints. Bravo ✨');
+  else {
+    if (g.w > 0 && h >= 12 && intake('w') < g.w * .5) tips.push(`Un verre d’eau ? Tu en es à ${habFmt('w', intake('w'))} aujourd’hui.`);
+    if (g.p > 0 && h >= 12 && intake('p') < g.p * .5) tips.push(`Une portion de protéines au prochain repas ? ${habFmt('p', intake('p'))} sur ${g.p} g.`);
+  }
+  if (g.s > 0 && sessionsWeek() < g.s && new Date().getDay() >= 4) { const r = g.s - sessionsWeek(); tips.push(`Encore ${r} séance${r > 1 ? 's' : ''} de renforcement cette semaine. Même courte, elle compte.`); }
+  return tips.length ? tips : ['Un ressenti à noter ? Ça aide beaucoup pour le rendez-vous.', 'Tout reste ici, sur ton téléphone. 🔒', 'Petit à petit, à ton rythme.', 'Touche le + pour noter ce que tu veux.', 'Pense à faire une sauvegarde de temps en temps, dans Plus.'];
+}
+
 const SEGPREV = new Map();
 function syncSegs(root = document) {
   $$('.seg', root).forEach(seg => {
@@ -432,8 +488,14 @@ addEventListener('scroll', onScroll, { passive: true });
 function vHome() {
   const act = active();
   const hi = S.profile.name ? `Bonjour ${esc(S.profile.name)}` : 'Aujourd’hui';
-  let h = `<p class="kicker">${cap(dfmt(new Date()))}</p><h1 class="lt" data-short="Aujourd’hui">${hi}</h1>`;
-  if (!S.treatments.length) return h + `<div class="card empty">${ic('pen')}<b>Aucun traitement en cours</b><p>Ajoute ton traitement pour suivre tes injections, ta rotation et ton niveau estimé.</p><button class="btn" data-act="newT">Ajouter un traitement</button></div>` + habitsCard();
+  if (act.length && !act.some(t => t.id === focusT)) focusT = act[0].id;
+  let h = `<div class="hello"><div><p class="kicker">${cap(dfmt(new Date()))}</p><h1 class="lt" data-short="Aujourd’hui">${hi}</h1></div>${cadiFor(act.length ? T(focusT) : null)}<div class="say" id="say" role="status" hidden></div></div>`;
+  mounts.push(() => {
+    const k = 'cadi-hello-' + today(), t = T(focusT), st = t ? status(t) : null;
+    let seen = false; try { seen = sessionStorage.getItem(k); sessionStorage.setItem(k, '1'); } catch (e) { }
+    if (!seen && st && st.last && st.dueIn <= 0) setTimeout(() => { say(cadiTips()[0]); cadiJelly($('.hello .cadi')); }, 900);
+  });
+  if (!S.treatments.length) return h + `<div class="card empty">${cadi({ size: 84 })}<b>Aucun traitement en cours</b><p>Ajoute ton traitement pour suivre tes injections, ta rotation et ton niveau estimé.</p><button class="btn" data-act="newT">Ajouter un traitement</button></div>` + habitsCard();
   if (!act.length) { h += maintenance(); h += homeAlerts(null); h += habitsCard(); h += `<div class="grid">${tileWeight()}${tileFeel()}</div>`; return h + lateAlerts(); }
   if (!act.some(t => t.id === focusT)) focusT = act[0].id;
   const t = T(focusT), st = status(t);
@@ -565,7 +627,7 @@ function vJournal() {
   items.sort((a, b) => b.d - a.d || (a.k === 'inj' ? -1 : 1));
   if (!items.length) {
     const e = { all: ['journal', 'Ton journal est vide', 'Tout ce que tu notes apparaît ici, jour par jour.', 'fab', 'Ajouter une entrée'], inj: ['pen', 'Aucune injection', 'Chaque injection notée alimente le compte à rebours, le stylo et la rotation des zones.', 'newInj', 'Noter une injection'], poids: ['scale', 'Aucune pesée', 'Pèse-toi le même jour chaque semaine pour une courbe lisible.', 'newW', 'Noter mon poids'], ress: ['face', 'Aucun ressenti', 'Note ce que tu ressens : c’est utile pour en parler à ton médecin.', 'newS', 'Noter un ressenti'] }[jFilter];
-    return h + `<div class="card empty" style="margin-top:14px">${ic(e[0])}<b>${e[1]}</b><p>${e[2]}</p><button class="btn" data-act="${e[3]}">${e[4]}</button></div>`;
+    return h + `<div class="card empty" style="margin-top:14px">${cadi({ size: 84 })}<b>${e[1]}</b><p>${e[2]}</p><button class="btn" data-act="${e[3]}">${e[4]}</button></div>`;
   }
   const ws = weightsAsc(), prevW = {}; ws.forEach((w, i) => prevW[w.id] = i ? ws[i - 1].kg : null);
   let cur = '';
@@ -600,7 +662,7 @@ function vProgress() {
   const ws = all.filter(w => D(w.date).getTime() >= from);
   h += `<h2 class="h2">Poids <button data-act="newW">Ajouter</button></h2>`;
   if (hidden() && all.length) h += `<div class="card empty">${ic('eye')}<b>Chiffres de poids masqués</b><p>Tu as choisi de ne pas afficher ton poids. Tes habitudes et tes mensurations restent visibles.</p><button class="btn plain" data-act="peek">Afficher pour cette fois</button></div>`;
-  else if (all.length < 2) h += `<div class="card empty">${ic('scale')}<b>${all.length ? 'Encore une pesée' : 'Pas encore de pesée'}</b><p>La courbe apparaît à partir de deux pesées.</p><button class="btn poids" data-act="newW">Noter mon poids</button></div>`;
+  else if (all.length < 2) h += `<div class="card empty">${cadi({ size: 72 })}<b>${all.length ? 'Encore une pesée' : 'Pas encore de pesée'}</b><p>La courbe apparaît à partir de deux pesées.</p><button class="btn poids" data-act="newW">Noter mon poids</button></div>`;
   else {
     const last = all[all.length - 1], first = all[0], wk = (D(last.date) - D(first.date)) / (7 * DAY);
     const hm = num(S.profile.height) / 100, goal = num(S.profile.goal);
@@ -623,7 +685,7 @@ function vProgress() {
     const inj = injOf(t.id);
     if (num(t.halfLifeH) > 0 && inj.length) h += `<div class="card chart-card" style="--c:${esc(t.color)}">${levelChart(t)}<p class="foot-note" style="margin:10px 0 0">Courbe théorique calculée avec une demi-vie de ${fr(t.halfLifeH, 0)} h. Elle ne reflète pas ton taux réel.</p></div>`;
     if (inj.length) h += `<p class="lab">Paliers de dose</p><div class="group">${steps(t).reverse().map((s, i) => `<div class="row"><span class="t"><b class="num" style="font-size:17px">${fmtDose(s.dose, esc(t.unit))}</b><span>${i === 0 ? 'Depuis le' : 'À partir du'} ${dfmt(s.from, { day: 'numeric', month: 'long' })}</span></span><span style="font-size:15px;color:var(--label2)">${s.n} injection${s.n > 1 ? 's' : ''}</span></div>`).join('')}</div>`;
-    else h += `<div class="card empty">${ic('pen')}<b>Aucune injection notée</b><p>Le niveau estimé et tes paliers de dose apparaîtront ici.</p><button class="btn" data-act="newInj" data-id="${t.id}">Noter une injection</button></div>`;
+    else h += `<div class="card empty">${cadi({ size: 72, done: 0 })}<b>Aucune injection notée</b><p>Le niveau estimé et tes paliers de dose apparaîtront ici.</p><button class="btn" data-act="newInj" data-id="${t.id}">Noter une injection</button></div>`;
     h += effectsByDay(t);
   }
   h += habitsHistory();
@@ -1006,7 +1068,7 @@ function goalCheck(it, pt) {
   setTimeout(() => {
     burst(pt, [H.color, H.color, '#FFD60A', '#FFFFFF']); haptic();
     const all = ['p', 'w', 'f'].every(x => !(S.goals[x] > 0) || intake(x) >= S.goals[x]);
-    if (all && k !== 's') { setTimeout(() => { burst({ x: innerWidth / 2, y: innerHeight * .32 }, ['var(--prot)', 'var(--eau)', 'var(--fib)', '#FFD60A'], 42, 1.8); haptic(); toast('Objectifs du jour atteints ✨'); }, 450); }
+    if (all && k !== 's') { setTimeout(() => { hud('Objectifs du jour atteints', 'var(--fib)', { cadi: true, sub: 'Protéines, eau et fibres ✨' }); burst({ x: innerWidth / 2, y: innerHeight * .42 }, ['var(--prot)', 'var(--eau)', 'var(--fib)', '#FFD60A'], 42, 1.8); }, 500); }
     else toast(k === 's' ? 'Objectif de la semaine atteint 💪' : `Objectif ${H.label.toLowerCase()} atteint 🎉`);
   }, 120);
 }
@@ -1259,8 +1321,9 @@ const obP = () => PRESETS.find(p => p.key === ob.preset) || PRESETS[0];
 function vOnboard() {
   if (!ob) ob = { name: S.profile.name || '', preset: 'mounjaro', cname: '', cunit: 'mg', cint: '7', dose: null, last: null, lastDate: '', weight: null, goal: null, ok: false };
   const s = OBS[obStep], anim = obShown !== obStep ? ' anim' : ''; obShown = obStep;
+  if (s === 'welcome') { if (anim) mounts.push(() => setTimeout(() => cadiSpin($('.splash .cadi')), 900)); }
   if (s === 'welcome') return `<div class="ob splash"><div class="step${anim}">
-    <svg class="logo" viewBox="0 0 96 96" aria-hidden="true">${[0, 1, 2, 3, 4, 5, 6].map(i => { const st = 360 / 7, g = 20; return `<path class="arc${i < 5 ? ' done' : ''}" d="${arcPath(48, 48, 40, -90 + i * st + g / 2, -90 + (i + 1) * st - g / 2)}" style="animation-delay:${i * 70}ms"/>`; }).join('')}</svg>
+    ${cadi({ size: 150, cls: 'intro' })}
     <h1>Cadence</h1><p class="sub">Ton carnet de traitement GLP-1, simple et privé.</p>
     <div class="feat"><span class="bubble" style="--c:var(--inj)">${ic('pen')}</span><div><b>Injections, stylo et rotation</b><span>Le compte à rebours, les doses restantes du stylo et la prochaine zone.</span></div></div>
     <div class="feat"><span class="bubble" style="--c:var(--prot)">${ic('egg')}</span><div><b>Protéines, eau, fibres</b><span>Les habitudes qui aident à passer les effets et à garder ton muscle.</span></div></div>
@@ -1305,7 +1368,8 @@ function vOnboard() {
   }
   if (s === 'consent') {
     title = 'Avant de commencer';
-    body = `<div class="info">${ic('heart')}<div><b>Un carnet, pas un médecin</b><span>Cadence ne recommande aucune dose. Les doses et le rythme sont ceux de ta prescription.</span></div></div>
+    body = `<div class="cadi-row">${cadi({ size: 64 })}<p>Je suis Cadi. Je t’aide à garder le rythme, sans jamais remplacer ton médecin.</p></div>`;
+    body += `<div class="info">${ic('heart')}<div><b>Un carnet, pas un médecin</b><span>Cadence ne recommande aucune dose. Les doses et le rythme sont ceux de ta prescription.</span></div></div>
     <div class="info">${ic('lock')}<div><b>Tes données restent ici</b><span>Elles sont enregistrées dans ce navigateur, sur ce téléphone, et nulle part ailleurs.</span></div></div>
     <button class="switch-row" data-act="obOk" role="switch" aria-checked="${ob.ok}" style="margin-top:6px"><span>J’ai compris que Cadence ne remplace pas un avis médical.</span><i class="switch"></i></button>`;
     cta = 'C’est parti'; act = 'obDone'; dis = !ob.ok;
@@ -1343,7 +1407,7 @@ function obDone() {
   S.profile.name = ob.name.trim();
   if (ob.goal > 0) S.profile.goal = String(ob.goal).replace('.', ',');
   S.onboarded = true; save(); ob = null; obStep = 0; obShown = -1; tab = 'home'; firstHome = true; animIn = true;
-  render(); scrollTo(0, 0); haptic(); burst({ x: innerWidth / 2, y: innerHeight * .28 }, ['var(--inj)', 'var(--prot)', 'var(--eau)', 'var(--fib)', '#FFD60A'], 36, 1.6); toast('C’est prêt');
+  render(); scrollTo(0, 0); hud('C’est prêt !', 'var(--inj)', { cadi: true, n: interval(t), sub: 'Bienvenue dans Cadence' }); setTimeout(() => burst({ x: innerWidth / 2, y: innerHeight * .4 }, ['var(--inj)', 'var(--prot)', 'var(--eau)', 'var(--fib)', '#FFD60A'], 36, 1.6), 250);
 }
 
 /* ---------- Actions ---------- */
@@ -1374,6 +1438,12 @@ const A = {
   peek() { peek = true; render(); },
   dismiss(k, el) { collapse(el && el.closest('.alert'), () => { S.dismissed[k] = true; save(); render(); }); },
   toggle(k, el) { S.settings[k] = !S.settings[k]; peek = false; save(); haptic(); if (el) el.setAttribute('aria-checked', S.settings[k]); setTimeout(render, REDUCED ? 0 : 260); },
+  cadi(id, el) {
+    cadiTaps++; haptic();
+    if (cadiTaps % 3 === 0) cadiSpin(el); else cadiJelly(el);
+    const tips = cadiTips(); say(tips[(cadiTaps - 1) % tips.length]);
+  },
+  cadiPoke(id, el) { haptic(); cadiSpin(el); },
   replayRing(id) { PREV.delete('ring:' + id); PREV.delete('late:' + id); firstHome = true; haptic(); render(); },
   quickW(id, el) { const pt = center(el), bub = center(el && el.closest('.hab') && el.closest('.hab').querySelector('.bubble')); pop(el, 1.2); haptic(); const it = addIntake('w', 250, 'Verre'); render(); floatText(pt, '+250 mL', 'var(--eau)'); toast(`${habFmt('w', intake('w'))} d’eau aujourd’hui`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); goalCheck(it, bub || pt); },
   quickS(id, el) { const pt = center(el), bub = center(el && el.closest('.hab') && el.closest('.hab').querySelector('.bubble')); pop(el, 1.2); haptic(); const it = addIntake('s', 1, 'Séance de renforcement'); render(); floatText(pt, '+1 séance', 'var(--renfo)'); toast(`${sessionsWeek()} séance${sessionsWeek() > 1 ? 's' : ''} cette semaine`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); goalCheck(it, bub || pt); },
@@ -1394,7 +1464,7 @@ const A = {
     advancePen(t, date);
     focusT = tid; save(); closeSheet(); firstHome = true; PREV.delete('ring:' + tid);
     const p = penInfo(t);
-    hud(p ? `Dose ${p.used} sur ${p.per}` : 'Injection notée', t.color);
+    hud('Injection notée', t.color, { cadi: true, n: interval(t), sub: p ? `Dose ${p.used} sur ${p.per} du stylo` : `Prochaine ${relDay(new Date(D(date).getTime() + interval(t) * DAY))}` });
     setTimeout(() => { if (tab !== 'home') { tabDir = -1; tab = 'home'; tabPop = true; renderTabs(); } render(); scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' }); }, REDUCED ? 0 : 380);
   },
   newPen(id) { const t = T(id); t.pen = null; save(); closeSheet(); render(); toast('Le nouveau stylo démarrera à ta prochaine injection'); },
@@ -1493,6 +1563,7 @@ async function give(name, data, type) {
 /* ---------- Événements ---------- */
 const SEL = '[data-act],[data-close],[data-tab],[data-focus],[data-jf],[data-range],[data-entry],[data-dose],[data-site],[data-feel],[data-lvl],[data-color],[data-injt],[data-preset],[data-obp],[data-obdose],[data-oblast],[data-add],[data-habk],[data-repd]';
 document.addEventListener('click', e => {
+  if (e.target.closest('#say')) return hideSay();
   const el = e.target.closest(SEL); if (!el) return;
   const d = el.dataset;
   if (d.act) return A[d.act] && A[d.act](d.id, el);
