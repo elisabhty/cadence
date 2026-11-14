@@ -117,7 +117,6 @@ button.row:active,.row.tap:active{background:var(--fill2)}
 .ring .arc.cur{stroke:color-mix(in srgb,var(--c) 38%,transparent)}
 .ring .arc.late{stroke:var(--red)}
 .ring .full{fill:none;stroke-width:18}
-.ring.anim .arc{animation:arcin .5s cubic-bezier(.2,.8,.2,1) both}
 @keyframes arcin{from{opacity:0;stroke-width:6}}
 .ring .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 40px}
 .ring .n{font-family:var(--round);font-size:68px;font-weight:700;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
@@ -195,7 +194,7 @@ svg.chart{width:100%;height:auto;display:block;margin-top:8px;overflow:visible;t
 .sheet .group,.sheet .card{background:var(--sheet-card)}
 .sheet .lab{margin-top:20px}
 .sheet .lab:first-child{margin-top:6px}
-@media (prefers-reduced-motion:reduce){.sheet .box,.sheet .bg{transition:none}.ring.anim .arc,.step.anim{animation:none!important}}
+
 
 .pills{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .pill{height:54px;border-radius:13px;background:var(--sheet-card);font-family:var(--round);font-size:19px;font-weight:700;border:2px solid transparent;transition:transform .1s}
@@ -269,7 +268,6 @@ svg.chart{width:100%;height:auto;display:block;margin-top:8px;overflow:visible;t
 .prog i{display:block;height:100%;background:var(--inj);border-radius:2px;transition:width .35s ease}
 .step h1{font-size:30px;font-weight:700;letter-spacing:.004em;line-height:1.14;margin:24px 0 8px}
 .step .sub{font-size:17px;color:var(--label2);margin-bottom:24px;line-height:1.38}
-.step.anim{animation:stepin .35s cubic-bezier(.2,.8,.2,1) both}
 @keyframes stepin{from{opacity:0;transform:translateX(18px)}}
 .grow{flex:1;min-height:20px}
 .cta{display:flex;flex-direction:column;gap:4px}
@@ -293,7 +291,7 @@ svg.chart{width:100%;height:auto;display:block;margin-top:8px;overflow:visible;t
 .splash .step{margin-top:6vh}
 .logo{width:96px;height:96px;margin-bottom:26px}
 .logo .arc{fill:none;stroke:var(--fill);stroke-width:10;stroke-linecap:round}
-.logo .arc.done{stroke:var(--inj);animation:arcin .45s cubic-bezier(.2,.8,.2,1) both}
+.logo .arc.done{stroke:var(--inj);animation:arcin .5s cubic-bezier(.2,.8,.2,1) both}
 .splash h1{font-size:44px;font-weight:800;letter-spacing:-.01em;margin-bottom:10px}
 .splash .sub{font-size:19px;color:var(--label2);line-height:1.35;margin-bottom:34px;max-width:30ch}
 .feat{display:flex;gap:14px;align-items:flex-start;margin-bottom:20px}
@@ -481,3 +479,156 @@ svg.chart{width:100%;height:auto;display:block;margin-top:8px;overflow:visible;t
 
 a.row{color:inherit;text-decoration:none}
 .hab .m{display:block}
+
+/* =========================================================
+   Animations et micro-animations
+   ========================================================= */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}}
+@keyframes fade{from{opacity:0}}
+@keyframes popin{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
+@keyframes pop{50%{transform:scale(1.1)}}
+@keyframes draw{from{stroke-dashoffset:1}}
+@keyframes arcdraw{from{stroke-dashoffset:1}}
+@keyframes breathe{50%{opacity:.4}}
+@keyframes duepulse{50%{transform:scale(1.03)}}
+@keyframes nudge{20%,60%{transform:translateX(-5px)}40%,80%{transform:translateX(5px)}}
+@keyframes growx{from{transform:scaleX(0)}}
+@keyframes growy{from{transform:scaleY(0)}}
+@keyframes wipe{from{clip-path:inset(0 100% 0 0)}}
+@keyframes cellin{from{opacity:0;transform:scale(.5)}}
+@keyframes tabpop{0%{transform:scale(.75)}55%{transform:scale(1.15)}100%{transform:scale(1)}}
+@keyframes bounce{0%{transform:scale(1)}30%{transform:scale(.8) rotate(-8deg)}60%{transform:scale(1.25) rotate(6deg)}100%{transform:scale(1)}}
+@keyframes ck{to{stroke-dashoffset:0}}
+@keyframes slidepr{from{transform:translateX(18px)}}
+@keyframes slidepl{from{transform:translateX(-18px)}}
+
+/* Entrée des pages, en cascade */
+.page.anim.r{animation:slidepr .45s cubic-bezier(.2,.8,.2,1) both}
+.page.anim.l{animation:slidepl .45s cubic-bezier(.2,.8,.2,1) both}
+.page.anim>*{animation:rise .5s cubic-bezier(.2,.8,.2,1) both}
+.page.anim>*:nth-child(2){animation-delay:.03s}.page.anim>*:nth-child(3){animation-delay:.06s}.page.anim>*:nth-child(4){animation-delay:.09s}
+.page.anim>*:nth-child(5){animation-delay:.12s}.page.anim>*:nth-child(6){animation-delay:.15s}.page.anim>*:nth-child(7){animation-delay:.18s}
+.page.anim>*:nth-child(8){animation-delay:.21s}.page.anim>*:nth-child(9){animation-delay:.24s}.page.anim>*:nth-child(n+10){animation-delay:.27s}
+
+/* Anneau : arcs dessinés un par un, jour en cours qui respire */
+.ring{cursor:pointer;-webkit-user-select:none;user-select:none}
+.ring .arc{transition:stroke .4s}
+.ring.anim .arc{stroke-dasharray:1 1;animation:arcdraw .55s cubic-bezier(.3,.7,.2,1) both}
+.ring .arc.cur{animation:breathe 2.6s ease-in-out infinite}
+.ring.anim .arc.cur{animation:arcdraw .55s cubic-bezier(.3,.7,.2,1) both,breathe 2.6s 1.4s ease-in-out infinite}
+.ring.due svg{animation:duepulse 2.4s ease-in-out infinite;transform-origin:center}
+.ring.late .c{animation:nudge .6s .7s both}
+.ring .c .n,.ring .c .u{animation:fade .5s .15s both}
+.ring:active svg{transform:scale(.98);transition:transform .15s}
+
+/* Tuiles et habitudes */
+.tile svg.spark{animation:wipe 1s .2s cubic-bezier(.4,0,.2,1) both}
+.hbar i{transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.hab .bubble{position:relative;overflow:visible;transition:transform .15s}
+.hab .bubble:active{transform:scale(.9)}
+.okb{position:absolute;right:-5px;top:-5px;width:17px;height:17px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;box-shadow:0 0 0 2px var(--card);transform:scale(0);transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+.okb .ic{width:11px;height:11px;stroke-width:3.4}
+.hab.ok .okb{transform:scale(1)}
+.hab.new .okb{animation:popin .5s cubic-bezier(.3,1.6,.5,1) both}
+.hab.new .bubble{animation:pop .5s cubic-bezier(.3,1.6,.5,1)}
+.hab .m:active{opacity:.7}
+.pen i{transition:background .3s}
+.pen i.new{animation:popin .55s .25s cubic-bezier(.3,1.6,.5,1) both}
+.cnt{font-variant-numeric:tabular-nums}
+
+/* Graphiques : tracé dessiné, aire et points en fondu, barres qui poussent */
+.page.anim .chart .ln{stroke-dasharray:1 1;animation:draw 1.2s .15s cubic-bezier(.45,0,.2,1) both}
+.page.anim .chart .area{animation:fade .8s .55s both}
+.page.anim .chart .fut{animation:fade .6s 1.1s both}
+.page.anim .chart .pt{animation:popin .35s cubic-bezier(.3,1.6,.5,1) both}
+.page.anim .bars i{animation:growy .6s cubic-bezier(.2,.8,.2,1) both;transform-origin:bottom}
+.page.anim .freq .b i,.page.anim .rate .b i,.page.anim .pbar i{animation:growx .8s .2s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}
+.page.anim .heat .c{animation:cellin .35s cubic-bezier(.3,1.4,.5,1) both}
+.page.anim .insight{animation:rise .5s .5s both}
+img[data-ph]{opacity:0;transition:opacity .4s}
+img[data-ph].ld{opacity:1}
+
+/* Barre d'onglets */
+#tabs button .ic{transition:transform .2s}
+#tabs button:active .ic{transform:scale(.88)}
+#tabs button.pop .ic{animation:tabpop .45s cubic-bezier(.3,1.6,.5,1)}
+#tabs .fab span .ic{transition:transform .35s cubic-bezier(.3,1.5,.5,1)}
+body.fab-open #tabs .fab span .ic{transform:rotate(45deg)}
+#tabs .fab span{transition:transform .15s,box-shadow .3s}
+
+/* Segments à curseur glissant */
+.seg{position:relative}
+.seg .thumb{position:absolute;top:2px;bottom:2px;left:0;width:0;border-radius:7px;background:var(--segon);box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04);transition:left .34s cubic-bezier(.3,.8,.25,1),width .34s cubic-bezier(.3,.8,.25,1);pointer-events:none}
+.seg.has-thumb>button{position:relative;z-index:1;transition:opacity .2s}
+.seg.has-thumb>button[aria-pressed="true"]{background:transparent;box-shadow:none}
+.seg.has-thumb>button:active{opacity:.55}
+.rep-bar .seg .thumb{background:#fff}
+
+/* Feuilles : la page recule, le contenu arrive en cascade */
+#app{background:var(--bg);min-height:100vh;transition:transform .45s cubic-bezier(.32,.72,0,1),filter .45s}
+html.sheet-open,html.sheet-open body{background:#000}
+html.sheet-open #app{transform:translateY(calc(env(safe-area-inset-top) + 10px)) scale(.935);filter:brightness(.94)}
+html.sheet-open #bar{opacity:0}
+@media (prefers-color-scheme:dark){html.sheet-open #app{filter:brightness(.75)}}
+.sheet .bg{background:rgba(0,0,0,.3)}
+.sheet.fresh .body>*{animation:rise .45s cubic-bezier(.2,.8,.2,1) both}
+.sheet.fresh .body>*:nth-child(2){animation-delay:.03s}.sheet.fresh .body>*:nth-child(3){animation-delay:.06s}.sheet.fresh .body>*:nth-child(4){animation-delay:.09s}
+.sheet.fresh .body>*:nth-child(5){animation-delay:.12s}.sheet.fresh .body>*:nth-child(6){animation-delay:.15s}.sheet.fresh .body>*:nth-child(n+7){animation-delay:.18s}
+.sheet.fresh .foot{animation:rise .45s .12s cubic-bezier(.2,.8,.2,1) both}
+.add-row .bubble{transition:transform .2s}
+.add-row:active .bubble{transform:scale(.9)}
+
+/* Sélections : petit rebond */
+.pill[aria-pressed="true"]{animation:pop .32s cubic-bezier(.3,1.6,.5,1)}
+.feel button{transition:transform .12s,border-color .2s,background .2s}
+.feel button[aria-pressed="true"] .e{animation:bounce .5s cubic-bezier(.3,1.4,.5,1)}
+.choice{transition:border-color .2s,transform .12s}
+.choice:active{transform:scale(.985)}
+.choice .ck{transition:background .2s,box-shadow .2s}
+.choice[aria-pressed="true"] .ck{animation:popin .4s cubic-bezier(.3,1.6,.5,1)}
+.swatches button{transition:box-shadow .25s,transform .15s}
+.swatches button[aria-pressed="true"]{animation:pop .32s cubic-bezier(.3,1.6,.5,1)}
+.chip{transition:transform .12s,background .2s,color .2s}
+.chip:active{transform:scale(.95)}
+.figure .zone{transform-box:fill-box;transform-origin:center}
+.qrow .ck{transition:background .25s,box-shadow .25s}
+.qrow[data-done="true"] .ck .ic path{stroke-dasharray:24;stroke-dashoffset:24;animation:ck .3s .05s ease-out forwards}
+.qrow .t{transition:color .3s}
+.alert .x:active{transform:scale(.9)}
+.plus{transition:transform .15s,background .2s}
+
+/* Interrupteur qui s'étire pendant l'appui, comme sur iOS */
+.switch::after{transition:transform .25s cubic-bezier(.3,1.3,.5,1),width .2s}
+[role="switch"]:active .switch::after{width:33px}
+[role="switch"][aria-checked="true"]:active .switch::after{transform:translateX(14px)}
+
+/* Toast : coche dessinée */
+#toast .ic path{stroke-dasharray:28;stroke-dashoffset:28;animation:ck .35s .12s ease-out forwards}
+#toast .ic g path,#toast.err .ic path{stroke-dasharray:none;stroke-dashoffset:0;animation:none}
+
+/* HUD de validation */
+.hud{position:fixed;inset:0;z-index:45;display:grid;place-items:center;pointer-events:none}
+.hud-in{width:176px;padding:26px 16px 20px;border-radius:24px;background:rgba(250,250,252,.86);-webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);box-shadow:0 24px 60px rgba(0,0,0,.2);display:flex;flex-direction:column;align-items:center;gap:12px;animation:popin .5s cubic-bezier(.2,1.3,.3,1) both}
+.hud-in svg{width:72px;height:72px;overflow:visible}
+.hud-in circle{fill:var(--c);transform-origin:center;transform-box:fill-box;animation:popin .45s .05s cubic-bezier(.3,1.6,.5,1) both}
+.hud-in path{fill:none;stroke:#fff;stroke-width:5.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:44;stroke-dashoffset:44;animation:ck .4s .32s cubic-bezier(.6,0,.3,1) forwards}
+.hud-in b{font-size:17px;font-weight:600;text-align:center}
+.hud.out .hud-in{transition:opacity .35s,transform .35s;opacity:0;transform:scale(.9)}
+@media (prefers-color-scheme:dark){.hud-in{background:rgba(44,44,46,.86)}}
+
+/* Confettis et chiffres qui s'envolent */
+.confetti{position:fixed;z-index:50;width:8px;height:8px;border-radius:2px;pointer-events:none;will-change:transform,opacity}
+.floaty{position:fixed;z-index:50;font-family:var(--round);font-weight:800;font-size:17px;pointer-events:none;white-space:nowrap;text-shadow:0 1px 0 var(--card),0 0 8px var(--card)}
+
+/* Démarrage */
+.step.anim>*{animation:rise .5s cubic-bezier(.2,.8,.2,1) both}
+.step.anim>*:nth-child(2){animation-delay:.05s}.step.anim>*:nth-child(3){animation-delay:.1s}.step.anim>*:nth-child(4){animation-delay:.15s}
+.step.anim>*:nth-child(5){animation-delay:.2s}.step.anim>*:nth-child(6){animation-delay:.25s}.step.anim>*:nth-child(7){animation-delay:.3s}.step.anim>*:nth-child(n+8){animation-delay:.35s}
+.splash .step.anim .logo{animation:popin .6s cubic-bezier(.3,1.5,.5,1) both}
+.prog i{transition:width .5s cubic-bezier(.3,1.2,.5,1)}
+
+/* Réduire les animations */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  html.sheet-open #app{transform:none;filter:none}
+}

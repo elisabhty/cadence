@@ -36,6 +36,85 @@ const nb = s => String(s).replace(/ ([?!;:])/g, ' $1');
 const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/* ---------- Animation ---------- */
+const PREV = new Map();
+let animIn = true, tabDir = 1, tabPop = false;
+const F = { int: v => fr(Math.round(v), 0), d1: v => fr1(v), d2: v => fr(v, 2), g: v => fr(Math.round(v), 0) + ' g', L: v => fr(v / 1000, 2) + ' L' };
+const cnt = (k, v, f = 'int', from) => `<span class="cnt" data-k="${k}" data-v="${v}" data-f="${f}"${from !== undefined ? ` data-from="${from}"` : ''}>${F[f](v)}</span>`;
+const ease = t => 1 - Math.pow(1 - t, 3);
+function tween(dur, fn) { const t0 = performance.now(); const step = now => { const p = Math.min(1, (now - t0) / dur); fn(ease(p)); if (p < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); }
+function animateCounts(root = document) {
+  $$('.cnt', root).forEach(el => {
+    const k = el.dataset.k, v = +el.dataset.v, f = F[el.dataset.f] || F.int;
+    const from = PREV.has(k) ? PREV.get(k) : (el.dataset.from !== undefined ? +el.dataset.from : v);
+    PREV.set(k, v);
+    if (REDUCED || from === v || !isFinite(from)) return;
+    el.textContent = f(from); tween(Math.min(900, 450 + Math.abs(v - from) * 8), p => { el.textContent = f(from + (v - from) * p); });
+  });
+  $$('[data-wk]', root).forEach(el => {
+    const k = 'w:' + el.dataset.wk, w = +el.dataset.w, from = PREV.has(k) ? PREV.get(k) : (animIn ? 0 : w);
+    PREV.set(k, w);
+    if (REDUCED || from === w) { el.style.width = w + '%'; return; }
+    el.style.transition = 'none'; el.style.width = from + '%'; el.getBoundingClientRect();
+    requestAnimationFrame(() => { el.style.transition = ''; el.style.width = w + '%'; });
+  });
+}
+function haptic() {
+  try {
+    if (navigator.vibrate) { navigator.vibrate(8); return; }
+    if (!IOS) return;
+    // iOS 18+ : basculer un interrupteur natif caché déclenche un retour haptique léger.
+    const l = document.createElement('label'), i = document.createElement('input');
+    l.setAttribute('aria-hidden', 'true'); l.style.display = 'none'; i.type = 'checkbox'; i.setAttribute('switch', ''); i.tabIndex = -1;
+    l.appendChild(i); document.head.appendChild(l); l.click(); l.remove();
+  } catch (e) { }
+}
+const center = el => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: r.top }; };
+function pop(el, k = 1.12) { if (!el || REDUCED || !el.animate) return; el.animate([{ transform: 'scale(1)' }, { transform: `scale(${k})` }, { transform: 'scale(1)' }], { duration: 340, easing: 'cubic-bezier(.3,1.6,.5,1)' }); }
+function floatText(pt, text, color) {
+  if (!pt || REDUCED) return;
+  const s = document.createElement('span'); s.className = 'floaty'; s.textContent = text; s.style.color = color; s.style.left = pt.x + 'px'; s.style.top = (pt.y - 14) + 'px';
+  document.body.appendChild(s);
+  s.animate([{ transform: 'translate(-50%,0) scale(.7)', opacity: 0 }, { transform: 'translate(-50%,-20px) scale(1.05)', opacity: 1, offset: .25 }, { transform: 'translate(-50%,-52px) scale(1)', opacity: 0 }], { duration: 950, easing: 'cubic-bezier(.2,.7,.3,1)' }).onfinish = () => s.remove();
+}
+function burst(pt, colors, n = 26, spread = 1.15) {
+  if (!pt || REDUCED) return;
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('i'); s.className = 'confetti'; s.style.left = pt.x + 'px'; s.style.top = pt.y + 'px'; s.style.background = colors[i % colors.length];
+    if (i % 3 === 0) s.style.borderRadius = '50%'; else if (i % 3 === 1) { s.style.width = '5px'; s.style.height = '11px'; }
+    document.body.appendChild(s);
+    const a = Math.random() * Math.PI * 2, dist = (45 + Math.random() * 80) * spread, dx = Math.cos(a) * dist, dy = Math.sin(a) * dist - 40 * spread;
+    s.animate([{ transform: 'translate(-50%,-50%) scale(.4) rotate(0deg)', opacity: 1 }, { transform: `translate(calc(-50% + ${dx * .7}px), calc(-50% + ${dy * .7}px)) scale(1) rotate(${Math.random() * 360}deg)`, opacity: 1, offset: .45 }, { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy + 70 * spread}px)) scale(.8) rotate(${Math.random() * 720 - 360}deg)`, opacity: 0 }], { duration: 900 + Math.random() * 500, easing: 'cubic-bezier(.2,.7,.3,1)' }).onfinish = () => s.remove();
+  }
+}
+function hud(text, color) {
+  const h = document.createElement('div'); h.className = 'hud'; h.style.setProperty('--c', color);
+  h.innerHTML = `<div class="hud-in"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30"/><path d="M19 33l9 9 18-19"/></svg><b>${esc(text)}</b></div>`;
+  document.body.appendChild(h); haptic();
+  setTimeout(() => h.classList.add('out'), REDUCED ? 700 : 1150); setTimeout(() => h.remove(), REDUCED ? 800 : 1550);
+}
+function collapse(el, cb) {
+  if (!el || REDUCED || !el.animate) return cb();
+  const h = el.offsetHeight; el.style.overflow = 'hidden';
+  el.animate([{ height: h + 'px', opacity: 1, transform: 'translateX(0)' }, { height: h + 'px', opacity: 0, transform: 'translateX(-24px)', offset: .55 }, { height: '0px', opacity: 0, paddingTop: '0px', paddingBottom: '0px', marginTop: '0px', marginBottom: '0px' }], { duration: 300, easing: 'ease-in', fill: 'forwards' }).onfinish = cb;
+}
+const SEGPREV = new Map();
+function syncSegs(root = document) {
+  $$('.seg', root).forEach(seg => {
+    const btns = $$(':scope > button', seg); if (!btns.length) return;
+    const on = btns.find(b => b.getAttribute('aria-pressed') === 'true'); if (!on || !on.offsetWidth) return;
+    const key = Object.keys(btns[0].dataset)[0] || 'seg', idx = btns.indexOf(on);
+    let th = $(':scope > .thumb', seg); const fresh = !th;
+    if (fresh) { th = document.createElement('i'); th.className = 'thumb'; seg.prepend(th); seg.classList.add('has-thumb'); }
+    const place = b => { th.style.left = b.offsetLeft + 'px'; th.style.width = b.offsetWidth + 'px'; };
+    const prev = SEGPREV.get(key);
+    if (fresh) { th.style.transition = 'none'; place(!REDUCED && prev !== undefined && prev !== idx && btns[prev] ? btns[prev] : on); th.getBoundingClientRect(); th.style.transition = ''; }
+    requestAnimationFrame(() => place(on));
+    SEGPREV.set(key, idx);
+  });
+}
+addEventListener('resize', () => syncSegs());
+
 /* ---------- Icônes ---------- */
 const IC = {
   today: '<circle cx="12" cy="12" r="8.5" opacity=".35"/><path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5"/><circle cx="12" cy="12" r="2.2"/>',
@@ -184,7 +263,7 @@ async function loadPhotos() {
   try { (await IDB.all() || []).forEach(f => { if (!URLS.has(f.id)) URLS.set(f.id, URL.createObjectURL(f.blob)); }); } catch (e) { }
   if (S.onboarded && (tab === 'progress' || stack.length)) { fillImgs(); }
 }
-function fillImgs(root = document) { $$('img[data-ph]', root).forEach(i => { const u = URLS.get(i.dataset.ph); if (u && i.src !== u) i.src = u; }); }
+function fillImgs(root = document) { $$('img[data-ph]', root).forEach(i => { const u = URLS.get(i.dataset.ph); if (u && i.src !== u) { i.onload = () => i.classList.add('ld'); i.src = u; } }); }
 async function shrink(file, max = 1400) {
   const url = URL.createObjectURL(file), img = new Image(); img.src = url;
   await img.decode();
@@ -304,7 +383,7 @@ function ringArcs(n, done, cur, late, anim) {
   for (let i = 0; i < n; i++) {
     const a0 = -90 + i * step + gap / 2, a1 = -90 + (i + 1) * step - gap / 2;
     const cls = late ? 'late' : i < done ? 'done' : i === cur ? 'cur' : '';
-    s += `<path class="arc ${cls}" d="${arcPath(c, c, R, a0, a1)}"${anim ? ` style="animation-delay:${i * 55}ms"` : ''}/>`;
+    s += `<path class="arc ${cls}" pathLength="1" d="${arcPath(c, c, R, a0, a1)}"${anim ? ` style="animation-delay:${i * 70}ms"` : ''}/>`;
   }
   return s;
 }
@@ -327,17 +406,19 @@ function render() {
     app.innerHTML = vOnboard();
   } else {
     $('#tabs').hidden = false; renderTabs();
-    app.innerHTML = `<div class="page">${({ home: vHome, journal: vJournal, progress: vProgress, more: vMore })[tab]()}</div>`;
+    app.innerHTML = `<div class="page${animIn && !REDUCED ? ' anim ' + (tabDir > 0 ? 'r' : 'l') : ''}">${({ home: vHome, journal: vJournal, progress: vProgress, more: vMore })[tab]()}</div>`;
   }
   mounts.forEach(f => f());
   fillImgs(app);
+  animateCounts(app); syncSegs(app);
+  animIn = false; tabPop = false;
   onScroll();
 }
 function renderTabs() {
   const it = [['home', 'Aujourd’hui', 'today'], ['journal', 'Journal', 'journal'], ['fab'], ['progress', 'Progrès', 'progress'], ['more', 'Plus', 'more']];
   $('#tabs').innerHTML = '<div class="in">' + it.map(([k, l, i]) => k === 'fab'
     ? `<button class="fab" data-act="fab" aria-label="Ajouter une entrée"><span>${ic('plus')}</span></button>`
-    : `<button data-tab="${k}" ${tab === k ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span></button>`).join('') + '</div>';
+    : `<button data-tab="${k}" ${tab === k ? 'aria-current="page"' : ''}${tab === k && tabPop ? ' class="pop"' : ''}>${ic(i)}<span>${l}</span></button>`).join('') + '</div>';
 }
 function onScroll() {
   const lt = $('.lt'), bar = $('#bar');
@@ -386,14 +467,14 @@ function hero(t, st) {
   } else {
     const { n, elapsed, dueIn, last } = st, late = dueIn < 0, due = dueIn === 0;
     ring = ringArcs(n, late || due ? n : Math.min(elapsed, n), late || due ? -1 : elapsed, late, anim);
-    if (late) { cls = ' late'; center = `<div class="n">${-dueIn}</div><div class="u">jour${-dueIn > 1 ? 's' : ''} de retard</div>`; }
-    else if (due) center = `<div class="n w">Jour J</div><div class="u">c’est aujourd’hui</div>`;
-    else center = `<div class="n">${dueIn}</div><div class="u">${dueIn > 1 ? 'jours restants' : 'jour restant'}</div>${n > 1 ? `<div class="d">jour ${elapsed + 1} sur ${n}</div>` : ''}`;
+    if (late) { cls = ' late'; center = `<div class="n">${cnt('late:' + t.id, -dueIn, 'int', anim ? 0 : undefined)}</div><div class="u">jour${-dueIn > 1 ? 's' : ''} de retard</div>`; }
+    else if (due) { cls = ' due'; center = `<div class="n w">Jour J</div><div class="u">c’est aujourd’hui</div>`; }
+    else center = `<div class="n">${cnt('ring:' + t.id, dueIn, 'int', anim ? n : undefined)}</div><div class="u">${dueIn > 1 ? 'jours restants' : 'jour restant'}</div>${n > 1 ? `<div class="d">jour ${elapsed + 1} sur ${n}</div>` : ''}`;
     when = (late || due ? 'Injection prévue ' : 'Prochaine injection ') + relDay(new Date(st.due));
     meta = `Dernière : ${fmtDose(last.dose, esc(t.unit))}, ${relDay(last.date)}.<br>Zone conseillée : ${siteLabel(rot.next).toLowerCase()}.`;
   }
   return `<section class="card hero" style="--c:${esc(t.color)}">
-    <div class="ring${anim ? ' anim' : ''}${cls}"><svg viewBox="0 0 236 236" aria-hidden="true">${ring}</svg><div class="c">${center}</div></div>
+    <div class="ring${anim ? ' anim' : ''}${cls}" data-act="replayRing" data-id="${t.id}"><svg viewBox="0 0 236 236" aria-hidden="true">${ring}</svg><div class="c">${center}</div></div>
     <p class="when">${cap(when)}</p><p class="meta">${meta}</p>
     <div class="acts"><button class="btn" data-act="newInj" data-id="${t.id}">${ic('pen')}Noter l’injection</button>${st.last ? `<button class="btn tint sq" data-act="ics" data-id="${t.id}" aria-label="Ajouter les rappels au calendrier">${ic('bell')}</button>` : ''}</div>
   </section>`;
@@ -430,9 +511,10 @@ function lateAlerts() {
 }
 function habitsCard() {
   const g = S.goals, row = (k, val, goal, sub) => {
-    const H = HAB[k], p = goal > 0 ? Math.min(1, val / goal) : 0;
-    return `<div class="hab" style="--c:${H.color}"><button class="bubble" style="--c:${H.color}" data-act="hab" data-id="${k}" aria-label="${H.label}">${ic(H.icon)}</button>
-      <button class="m" data-act="hab" data-id="${k}" style="text-align:left"><span class="top">${H.label}<span><b>${habFmt(k, val)}</b>${goal > 0 ? ' / ' + habFmt(k, goal) : ''}${sub || ''}</span></span><span class="hbar" style="display:block"><i style="width:${(p * 100).toFixed(0)}%"></i></span></button>
+    const H = HAB[k], p = goal > 0 ? Math.min(1, val / goal) : 0, ok = goal > 0 && val >= goal, was = PREV.get('ok:' + k);
+    PREV.set('ok:' + k, ok);
+    return `<div class="hab${ok ? ' ok' : ''}${ok && was === false ? ' new' : ''}" style="--c:${H.color}"><button class="bubble" style="--c:${H.color}" data-act="hab" data-id="${k}" aria-label="${H.label}">${ic(H.icon)}<span class="okb">${ic('check')}</span></button>
+      <button class="m" data-act="hab" data-id="${k}" style="text-align:left"><span class="top">${H.label}<span><b>${cnt('hab:' + k, val, k === 'w' ? 'L' : k === 's' ? 'int' : 'g', animIn ? 0 : undefined)}</b>${goal > 0 ? ' / ' + habFmt(k, goal) : ''}${sub || ''}</span></span><span class="hbar" style="display:block"><i data-wk="hab${k}" data-w="${(p * 100).toFixed(1)}" style="width:${(p * 100).toFixed(0)}%"></i></span></button>
       <button class="plus" data-act="${k === 'w' ? 'quickW' : k === 's' ? 'quickS' : 'hab'}" data-id="${k}" aria-label="Ajouter : ${H.label}">${ic('plus')}</button></div>`;
   };
   return `<h2 class="h2">Mes habitudes du jour</h2><div class="card habits">${row('p', intake('p'), g.p)}${row('w', intake('w'), g.w)}${row('f', intake('f'), g.f)}${row('s', sessionsWeek(), g.s, ' cette sem.')}</div>`;
@@ -441,13 +523,13 @@ function tileWeight() {
   const w = weightsAsc(), last = w[w.length - 1];
   if (hidden() && last) return `<button class="tile" style="--c:var(--poids)" data-tab="progress"><span class="h">${ic('scale')}Poids</span><span class="v">${ic('eye')}</span><span class="s">Chiffres masqués. Pesée ${relDay(last.date)}.</span></button>`;
   return `<button class="tile" style="--c:var(--poids)" data-tab="progress"><span class="h">${ic('scale')}Poids</span>
-    ${last ? `<span class="v">${fr1(last.kg)}<small>kg</small></span><span class="s">${w.length > 1 ? sgn(last.kg - w[0].kg) + ' kg depuis le début' : 'Pesée ' + relDay(last.date)}</span>${spark(w.slice(-12).map(x => x.kg), 'var(--poids)')}`
+    ${last ? `<span class="v">${cnt('tw', last.kg, 'd1')}<small>kg</small></span><span class="s">${w.length > 1 ? sgn(last.kg - w[0].kg) + ' kg depuis le début' : 'Pesée ' + relDay(last.date)}</span>${spark(w.slice(-12).map(x => x.kg), 'var(--poids)')}`
       : `<span class="v">–</span><span class="s">Note ta première pesée</span>`}</button>`;
 }
 function tileLevel(t, st) {
   if (!(num(t.halfLifeH) > 0) || !st.last) return `<button class="tile" style="--c:var(--niv)" data-act="${num(t.halfLifeH) > 0 ? 'newInj' : 'editT'}" data-id="${t.id}"><span class="h">${ic('drop')}Niveau</span><span class="v">–</span><span class="s">${num(t.halfLifeH) > 0 ? 'Apparaît après la première injection' : 'Renseigne la demi-vie pour l’estimer'}</span></button>`;
   const now = Date.now(), pts = []; for (let i = 0; i <= 40; i++) pts.push(levelAt(t, now - 14 * DAY + i * 14 * DAY / 40));
-  return `<button class="tile" style="--c:var(--niv)" data-tab="progress"><span class="h">${ic('drop')}Niveau</span><span class="v">${fr(levelAt(t, now), 2)}<small>${esc(t.unit)}</small></span><span class="s">estimé, courbe théorique</span>${spark(pts, 'var(--niv)')}</button>`;
+  return `<button class="tile" style="--c:var(--niv)" data-tab="progress"><span class="h">${ic('drop')}Niveau</span><span class="v">${cnt('tl:' + t.id, +levelAt(t, now).toFixed(2), 'd2')}<small>${esc(t.unit)}</small></span><span class="s">estimé, courbe théorique</span>${spark(pts, 'var(--niv)')}</button>`;
 }
 function tileFeel() {
   const wk = S.symptoms.filter(s => daysBetween(s.date, today()) < 7);
@@ -462,9 +544,9 @@ function tilePen(t, st) {
   const p = penInfo(t), stock = t.stock !== '' && t.stock != null ? num(t.stock) : null;
   if (num(t.penDoses) > 0) {
     if (!p) return `<button class="tile" style="--c:var(--inj)" data-act="editT" data-id="${t.id}"><span class="h">${ic('pen')}Stylo</span><span class="v">–</span><span class="s">Démarre à ta prochaine injection${stock !== null ? `. ${fr(stock, 0)} dose${stock > 1 ? 's' : ''} en stock` : ''}</span></button>`;
-    const warn = p.done || (p.expIn !== null && p.expIn <= 3);
+    const warn = p.done || (p.expIn !== null && p.expIn <= 3), pk = 'pen:' + t.id, was = PREV.get(pk); PREV.set(pk, p.used);
     const s = p.done ? 'Stylo terminé : le liquide restant est normal, ne l’injecte pas' : p.exp ? (p.expIn < 0 ? 'Date d’utilisation dépassée' : `À jeter le ${dfmt(p.exp, { day: 'numeric', month: 'short' })}`) : `Ouvert ${relDay(p.opened)}`;
-    return `<button class="tile" style="--c:${warn ? 'var(--red)' : 'var(--inj)'}" data-act="pen" data-id="${t.id}"><span class="h" style="color:var(--inj)">${ic('pen')}Stylo en cours</span><span class="pen">${Array.from({ length: p.per }, (_, i) => `<i class="${i < p.used ? 'u' : ''}"></i>`).join('')}</span><span class="s${warn ? ' warn' : ''}" style="margin-top:6px">${p.used} dose${p.used > 1 ? 's' : ''} sur ${p.per}. ${s}${stock !== null ? `. Stock : ${fr(stock, 0)}` : ''}</span></button>`;
+    return `<button class="tile" style="--c:${warn ? 'var(--red)' : 'var(--inj)'}" data-act="pen" data-id="${t.id}"><span class="h" style="color:var(--inj)">${ic('pen')}Stylo en cours</span><span class="pen">${Array.from({ length: p.per }, (_, i) => `<i class="${i < p.used ? 'u' : ''}${was !== undefined && i >= was && i < p.used ? ' new' : ''}"></i>`).join('')}</span><span class="s${warn ? ' warn' : ''}" style="margin-top:6px">${p.used} dose${p.used > 1 ? 's' : ''} sur ${p.per}. ${s}${stock !== null ? `. Stock : ${fr(stock, 0)}` : ''}</span></button>`;
   }
   if (stock !== null) {
     const low = stock <= 1, until = st.last && stock > 0 ? new Date(st.due + (stock - 1) * st.n * DAY) : null;
@@ -563,7 +645,7 @@ function effectsByDay(t) {
   const grid = {}; let mx = 1;
   rows.forEach(r => { const k = r.type + '|' + r.day; grid[k] = (grid[k] || 0) + 1; mx = Math.max(mx, grid[k]); });
   let h = `<p class="lab">Effets selon le jour d’injection</p><div class="card chart-card"><div class="heat" style="--n:${n}"><span></span>${Array.from({ length: n }, (_, i) => `<span class="hd">J${i + 1}</span>`).join('')}`;
-  types.forEach(ty => { h += `<span class="lb">${emo(ty)} ${esc(ty)}</span>`; for (let d = 1; d <= n; d++) { const v = grid[ty + '|' + d] || 0; h += `<span class="c" style="${v ? `background:color-mix(in srgb,var(--ress) ${Math.round(18 + 70 * v / mx)}%,var(--fill2))` : ''}">${v || ''}</span>`; } });
+  types.forEach(ty => { h += `<span class="lb">${emo(ty)} ${esc(ty)}</span>`; for (let d = 1; d <= n; d++) { const v = grid[ty + '|' + d] || 0; h += `<span class="c" style="animation-delay:${(d * 35 + types.indexOf(ty) * 60)}ms;${v ? `background:color-mix(in srgb,var(--ress) ${Math.round(18 + 70 * v / mx)}%,var(--fill2))` : ''}">${v || ''}</span>`; } });
   h += `</div><p class="foot-note" style="margin:8px 0 0">J1 = jour de l’injection. Chiffre = nombre de fois où tu l’as noté (4 derniers mois).</p>`;
   const ins = [];
   types.forEach(ty => {
@@ -594,7 +676,7 @@ function habitsHistory() {
     const H = HAB[k], g = S.goals[k], vals = days.map(d => intake(k, d)), mx = Math.max(g || 0, ...vals, 1);
     const logged = vals.filter(v => v > 0), avg = logged.length ? sum(logged) / logged.length : 0, hit = g > 0 ? vals.filter(v => v >= g).length : 0;
     return `<div style="--c:${H.color};margin-top:18px"><div class="hstat"><b>${H.label}</b><span>${logged.length ? `moyenne ${habFmt(k, avg)} les jours notés${g > 0 ? `, objectif atteint ${hit} j sur 14` : ''}` : 'rien noté'}</span></div>
-      <div class="bars">${g > 0 ? `<span class="goal-l" style="bottom:${(g / mx * 100).toFixed(1)}%"></span>` : ''}${vals.map(v => `<i class="${v ? '' : 'off'}" style="height:${v ? Math.max(4, v / mx * 100) : 3}%"></i>`).join('')}</div></div>`;
+      <div class="bars">${g > 0 ? `<span class="goal-l" style="bottom:${(g / mx * 100).toFixed(1)}%"></span>` : ''}${vals.map((v, i) => `<i class="${v ? '' : 'off'}" style="height:${v ? Math.max(4, v / mx * 100) : 3}%;animation-delay:${i * 28}ms"></i>`).join('')}</div></div>`;
   };
   const wk = []; for (let i = 0; i < 4; i++) { const s = addDays(weekStart(), -7 * i), e = addDays(s, 6); wk.push(sum(S.intake.filter(x => x.k === 's' && x.date >= s && x.date <= e).map(x => x.v))); }
   return `<h2 class="h2">Habitudes <button data-act="hab" data-id="p">Ajouter</button></h2><div class="card chart-card" style="padding-top:0">${block('p')}${block('w')}${block('f')}
@@ -648,9 +730,9 @@ function weightChart(ws, goal) {
     <defs><linearGradient id="${id}-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--poids)" stop-opacity=".28"/><stop offset="1" stop-color="var(--poids)" stop-opacity="0"/></linearGradient></defs>
     ${ticks.map(v => `<line class="grid-l" x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text x="${W - R + 6}" y="${(y(v) + 4).toFixed(1)}">${fr(v, 0)}</text>`).join('')}
     ${goal > 0 && goal >= lo && goal <= hi ? `<line x1="${L}" x2="${W - R}" y1="${y(goal).toFixed(1)}" y2="${y(goal).toFixed(1)}" stroke="var(--poids)" stroke-width="1.5" stroke-dasharray="4 4"/>` : ''}
-    <path d="${path}L${p[p.length - 1][0].toFixed(1)} ${H - B}L${p[0][0].toFixed(1)} ${H - B}Z" fill="url(#${id}-g)"/>
-    <path d="${path}" fill="none" stroke="var(--poids)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-    ${ws.length <= 30 ? p.map(q => `<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="3" fill="var(--card)" stroke="var(--poids)" stroke-width="2"/>`).join('') : ''}
+    <path class="area" d="${path}L${p[p.length - 1][0].toFixed(1)} ${H - B}L${p[0][0].toFixed(1)} ${H - B}Z" fill="url(#${id}-g)"/>
+    <path class="ln" pathLength="1" d="${path}" fill="none" stroke="var(--poids)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    ${ws.length <= 30 ? p.map((q, i) => `<circle class="pt" style="animation-delay:${(.25 + .9 * i / Math.max(1, p.length - 1)).toFixed(2)}s" cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="3" fill="var(--card)" stroke="var(--poids)" stroke-width="2"/>`).join('') : ''}
     ${inj}
     <line class="guide" y1="${Tp - 4}" y2="${H - B}"/><circle class="hdot" r="6" fill="var(--poids)" stroke="var(--card)" stroke-width="2.5"/>
     <text x="${L}" y="${H - 2}">${short(ws[0].date)}</text><text x="${W - R}" y="${H - 2}" text-anchor="end">${short(ws[ws.length - 1].date)}</text>
@@ -672,9 +754,9 @@ function levelChart(t) {
   <svg class="chart" id="${id}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Niveau estimé sur 4 semaines">
     <defs><linearGradient id="${id}-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--c)" stop-opacity=".3"/><stop offset="1" stop-color="var(--c)" stop-opacity="0"/></linearGradient></defs>
     <line class="grid-l" x1="${P}" x2="${W - P}" y1="${H - 22}" y2="${H - 22}"/>
-    <path d="${line(past)}L${x(now).toFixed(1)} ${H - 22}L${x(from).toFixed(1)} ${H - 22}Z" fill="url(#${id}-g)"/>
-    <path d="${line(past)}" fill="none" stroke="var(--c)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
-    <path d="${line(fut)}" fill="none" stroke="var(--c)" stroke-width="2.2" stroke-dasharray="2 5" stroke-linecap="round" opacity=".7"/>
+    <path class="area" d="${line(past)}L${x(now).toFixed(1)} ${H - 22}L${x(from).toFixed(1)} ${H - 22}Z" fill="url(#${id}-g)"/>
+    <path class="ln" pathLength="1" d="${line(past)}" fill="none" stroke="var(--c)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path class="fut" d="${line(fut)}" fill="none" stroke="var(--c)" stroke-width="2.2" stroke-dasharray="2 5" stroke-linecap="round" opacity=".7"/>
     ${marks}
     <line class="guide" y1="4" y2="${H - 22}"/><circle class="hdot" r="6" fill="var(--c)" stroke="var(--card)" stroke-width="2.5"/>
     <text x="${P}" y="${H - 1}">il y a 3 sem.</text><text x="${x(now).toFixed(1)}" y="${H - 1}" text-anchor="middle">aujourd’hui</text><text x="${W - P}" y="${H - 1}" text-anchor="end">+7 j</text>
@@ -741,15 +823,24 @@ function openSheet({ title = '', left = 'Annuler', right = '', rightAct = '', bo
   el.innerHTML = `<div class="bg" data-close></div><div class="box" role="dialog" aria-modal="true" aria-label="${esc(title)}">
     <div class="drag"><div class="grab"><i></i></div><div class="nav"><button class="l" data-close>${left}</button><div class="ttl">${nb(title)}</div>${right ? `<button class="r" data-act="${rightAct}">${right}</button>` : '<span class="r"></span>'}</div></div>
     <div class="body">${body}</div>${foot ? `<div class="foot">${foot}</div>` : ''}</div>`;
+  const first = !stack.length;
   document.body.appendChild(el); stack.push(el); document.body.classList.add('locked');
+  if (first && $('#report').hidden) scaleBack(true);
+  el.classList.add('fresh'); setTimeout(() => el.classList.remove('fresh'), 900);
   el.getBoundingClientRect(); requestAnimationFrame(() => el.classList.add('on'));
-  dragify(el); fillImgs(el);
+  dragify(el); fillImgs(el); animateCounts(el); requestAnimationFrame(() => syncSegs(el));
   return el;
+}
+function scaleBack(on) {
+  const app = $('#app');
+  if (on) { if (REDUCED) return; app.style.transformOrigin = `50% ${scrollY}px`; app.style.clipPath = `inset(${scrollY}px 0 0 0 round 16px)`; document.documentElement.classList.add('sheet-open'); }
+  else { document.documentElement.classList.remove('sheet-open'); setTimeout(() => { if (!stack.length) { app.style.clipPath = ''; app.style.transformOrigin = ''; } }, 450); }
 }
 function closeSheet(instant) {
   const el = stack.pop(); if (!el) return;
   if (instant === true) el.remove(); else { el.classList.remove('on'); setTimeout(() => el.remove(), 420); }
-  if (!stack.length) document.body.classList.remove('locked');
+  if (el.dataset.fab) document.body.classList.remove('fab-open');
+  if (!stack.length) { document.body.classList.remove('locked'); scaleBack(false); }
 }
 function dragify(el) {
   const box = $('.box', el), h = $('.drag', el); let y0 = null, dy = 0;
@@ -772,7 +863,8 @@ function toast(m, err, undo) {
 function fFab() {
   const t = T(focusT) || active()[0], st = t ? status(t) : {}, w = weightsAsc().pop();
   const r = (act, icon, color, title, sub, id = '') => `<button class="add-row" data-act="${act}"${id ? ` data-id="${id}"` : ''}><span class="bubble" style="--c:${color}">${ic(icon)}</span><span><b>${title}</b><span>${sub}</span></span></button>`;
-  openSheet({
+  document.body.classList.add('fab-open'); haptic();
+  const fabEl = openSheet({
     title: 'Ajouter', small: true, body: `<div class="group">
     ${r('newInj', 'pen', t ? esc(t.color) : 'var(--inj)', 'Injection', !t ? 'Ajoute d’abord un traitement' : st.last ? (st.dueIn < 0 ? 'En retard de ' + (-st.dueIn) + ' j' : st.dueIn === 0 ? 'Prévue aujourd’hui' : 'Prochaine ' + relDay(new Date(st.due))) : 'Note ta première injection')}
     ${r('newS', 'face', 'var(--ress)', 'Ressenti', 'Effets, appétit, énergie, humeur')}
@@ -782,6 +874,7 @@ function fFab() {
     ${r('addPhoto', 'camera', 'var(--niv)', 'Photo de suivi', 'Reste sur ton téléphone', 'body')}
     ${r('questions', 'question', 'var(--inj)', 'Question pour le médecin', 'À garder pour ton prochain rendez-vous')}
   </div>` });
+  fabEl.dataset.fab = '1';
 }
 
 /* Injection */
@@ -830,8 +923,12 @@ function initRuler(root, input, v, cb) {
   const go = (x, smooth) => { lock = Date.now() + (smooth ? 400 : 60); sc.scrollTo({ left: (x - min) * 100, behavior: smooth ? 'smooth' : 'auto' }); };
   const val = () => Math.min(max, Math.max(min, Math.round((min + sc.scrollLeft / 100) * 10) / 10));
   go(v); input.value = fr1(v); cb && cb(v);
+  let lastI = Math.floor(v);
   sc.addEventListener('scroll', () => {
-    if (Date.now() > lock) { const x = val(); input.value = fr1(x); cb && cb(x); }
+    if (Date.now() > lock) {
+      const x = val(); input.value = fr1(x); cb && cb(x);
+      const iv = Math.floor(x); if (iv !== lastI) { lastI = iv; haptic(); if (!REDUCED) input.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.035)' }, { transform: 'scale(1)' }], { duration: 160 }); }
+    }
     clearTimeout(tm); tm = setTimeout(() => { if (Date.now() > lock) go(val(), true); }, 150);
   }, { passive: true });
   input.addEventListener('input', () => { const x = num(input.value); if (x >= min && x <= max) go(x, true); if (x > 0) cb && cb(x); });
@@ -887,7 +984,7 @@ function habBody(k) {
   const val = isS ? sessionsWeek() : intake(k), p = g > 0 ? Math.min(1, val / g) : 0;
   const list = isS ? S.intake.filter(i => i.k === 's' && i.date >= weekStart()) : S.intake.filter(i => i.k === k && i.date === today());
   return `<div class="seg mini-seg">${['p', 'w', 'f', 's'].map(x => `<button data-habk="${x}" aria-pressed="${x === k}">${HAB[x].label}</button>`).join('')}</div>
-  <div style="--c:${H.color}"><p class="hab-total"><b>${habFmt(k, val)}</b><span>${g > 0 ? '/ ' + habFmt(k, g) : ''}${isS ? ' séance' + (g > 1 ? 's' : '') + ' cette semaine' : ' aujourd’hui'}</span></p><div class="hbar"><i style="width:${(p * 100).toFixed(0)}%"></i></div>
+  <div style="--c:${H.color}"><p class="hab-total"><b>${cnt('habs:' + k, val, k === 'w' ? 'L' : k === 's' ? 'int' : 'g')}</b><span>${g > 0 ? '/ ' + habFmt(k, g) : ''}${isS ? ' séance' + (g > 1 ? 's' : '') + ' cette semaine' : ' aujourd’hui'}</span></p><div class="hbar"><i data-wk="habs${k}" data-w="${(p * 100).toFixed(1)}" style="width:${(p * 100).toFixed(0)}%"></i></div>
   <p class="lab">${isS ? 'Ajouter' : 'Ajouter une portion'}</p>
   <div class="portions">${H.portions.map(([l, v]) => `<button data-add="${k}|${v}|${esc(l)}"><b>${esc(l)}</b><span>${isS ? '+1' : '≈ ' + (k === 'w' ? fr(v, 0) + ' mL' : fr(v, 0) + ' g')}</span></button>`).join('')}</div>
   ${isS ? '' : `<div class="custom"><div class="group"><div class="frow"><label for="h-v">Autre</label><input id="h-v" inputmode="decimal" placeholder="–" enterkeyhint="done"><span class="unit">${k === 'w' ? 'mL' : 'g'}</span></div></div><button class="btn" style="--c:${H.color}" data-act="habCustom" data-id="${k}">Ajouter</button></div>`}
@@ -895,10 +992,23 @@ function habBody(k) {
   <p class="foot-note">${{ p: 'Valeurs moyennes arrondies, à titre indicatif. Les protéines aident à préserver le muscle pendant la perte de poids.', w: 'Boire régulièrement aide surtout en cas de nausées, de diarrhée ou de constipation.', f: 'Augmente les fibres progressivement, avec de l’eau, pour éviter les ballonnements.', s: 'Le renforcement musculaire (poids du corps, élastiques, haltères) aide à préserver le muscle.' }[k]} <button data-act="goals" style="color:var(--inj);font-weight:600">Modifier l’objectif</button></p></div>`;
 }
 function fHab(k = 'p') { openSheet({ title: 'Habitudes', left: 'Fermer', body: habBody(k) }); }
-function refreshHab(k) { const b = q('.body'); if (b && q('[data-habk]')) b.innerHTML = habBody(k); render(); }
+function refreshHab(k) { const b = q('.body'); if (b && q('[data-habk]')) { b.innerHTML = habBody(k); animateCounts(b); syncSegs(b); } render(); }
+const habVal = k => k === 's' ? sessionsWeek() : intake(k);
 function addIntake(k, v, label, date = today()) {
+  const before = habVal(k);
   const it = { id: uid(), k, v, label, date }; S.intake.push(it); save();
+  it._before = before; it._after = habVal(k);
   return it;
+}
+function goalCheck(it, pt) {
+  const k = it.k, g = S.goals[k], H = HAB[k];
+  if (!(g > 0) || it._before >= g || it._after < g) return;
+  setTimeout(() => {
+    burst(pt, [H.color, H.color, '#FFD60A', '#FFFFFF']); haptic();
+    const all = ['p', 'w', 'f'].every(x => !(S.goals[x] > 0) || intake(x) >= S.goals[x]);
+    if (all && k !== 's') { setTimeout(() => { burst({ x: innerWidth / 2, y: innerHeight * .32 }, ['var(--prot)', 'var(--eau)', 'var(--fib)', '#FFD60A'], 42, 1.8); haptic(); toast('Objectifs du jour atteints ✨'); }, 450); }
+    else toast(k === 's' ? 'Objectif de la semaine atteint 💪' : `Objectif ${H.label.toLowerCase()} atteint 🎉`);
+  }, 120);
 }
 function fGoals() {
   const w = weightsAsc().pop(), kg = w ? w.kg : null;
@@ -1140,7 +1250,7 @@ function openReport(days = repDays) {
   repDays = days;
   const r = $('#report'); r.hidden = false; document.body.classList.add('locked');
   r.innerHTML = `<div class="rep-bar"><button data-act="closeReport">Fermer</button><div class="seg">${[[30, '30 j'], [90, '90 j'], [0, 'Tout']].map(([k, l]) => `<button data-repd="${k}" aria-pressed="${repDays === k}">${l}</button>`).join('')}</div><button class="pr" data-act="printReport">PDF</button></div>${buildReport(days)}`;
-  r.scrollTop = 0;
+  r.scrollTop = 0; syncSegs(r);
 }
 
 /* ---------- Démarrage ---------- */
@@ -1232,8 +1342,8 @@ function obDone() {
   if (ob.weight > 0) { S.weights = S.weights.filter(w => w.date !== today()); S.weights.push({ id: uid(), date: today(), kg: ob.weight }); }
   S.profile.name = ob.name.trim();
   if (ob.goal > 0) S.profile.goal = String(ob.goal).replace('.', ',');
-  S.onboarded = true; save(); ob = null; obStep = 0; obShown = -1; tab = 'home'; firstHome = true;
-  render(); scrollTo(0, 0); toast('C’est prêt');
+  S.onboarded = true; save(); ob = null; obStep = 0; obShown = -1; tab = 'home'; firstHome = true; animIn = true;
+  render(); scrollTo(0, 0); haptic(); burst({ x: innerWidth / 2, y: innerHeight * .28 }, ['var(--inj)', 'var(--prot)', 'var(--eau)', 'var(--fib)', '#FFD60A'], 36, 1.6); toast('C’est prêt');
 }
 
 /* ---------- Actions ---------- */
@@ -1262,12 +1372,13 @@ const A = {
   report() { closeAllThen(() => openReport()); },
   profile() { tab = 'more'; render(); setTimeout(() => { const i = $('#p-max'); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } }, 50); },
   peek() { peek = true; render(); },
-  dismiss(k) { S.dismissed[k] = true; save(); render(); },
-  toggle(k) { S.settings[k] = !S.settings[k]; peek = false; save(); render(); },
-  quickW() { const it = addIntake('w', 250, 'Verre'); render(); toast(`+250 mL, ${habFmt('w', intake('w'))} aujourd’hui`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); },
-  quickS() { const it = addIntake('s', 1, 'Séance de renforcement'); render(); toast(`Séance notée, ${sessionsWeek()} cette semaine`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); },
-  habCustom(k) { const v = num(q('#h-v').value); if (!(v > 0)) return toast('Indique une quantité', true); addIntake(k, v, 'Autre'); refreshHab(k); toast(`+${k === 'w' ? fr(v, 0) + ' mL' : fr(v, 0) + ' g'}`); },
-  habDel(id) { const it = S.intake.find(x => x.id === id); S.intake = S.intake.filter(x => x.id !== id); save(); if (it) refreshHab(it.k); },
+  dismiss(k, el) { collapse(el && el.closest('.alert'), () => { S.dismissed[k] = true; save(); render(); }); },
+  toggle(k, el) { S.settings[k] = !S.settings[k]; peek = false; save(); haptic(); if (el) el.setAttribute('aria-checked', S.settings[k]); setTimeout(render, REDUCED ? 0 : 260); },
+  replayRing(id) { PREV.delete('ring:' + id); PREV.delete('late:' + id); firstHome = true; haptic(); render(); },
+  quickW(id, el) { const pt = center(el), bub = center(el && el.closest('.hab') && el.closest('.hab').querySelector('.bubble')); pop(el, 1.2); haptic(); const it = addIntake('w', 250, 'Verre'); render(); floatText(pt, '+250 mL', 'var(--eau)'); toast(`${habFmt('w', intake('w'))} d’eau aujourd’hui`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); goalCheck(it, bub || pt); },
+  quickS(id, el) { const pt = center(el), bub = center(el && el.closest('.hab') && el.closest('.hab').querySelector('.bubble')); pop(el, 1.2); haptic(); const it = addIntake('s', 1, 'Séance de renforcement'); render(); floatText(pt, '+1 séance', 'var(--renfo)'); toast(`${sessionsWeek()} séance${sessionsWeek() > 1 ? 's' : ''} cette semaine`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); goalCheck(it, bub || pt); },
+  habCustom(k, el) { const v = num(q('#h-v').value); if (!(v > 0)) return toast('Indique une quantité', true); const pt = center(q('.hab-total')); haptic(); const it = addIntake(k, v, 'Autre'); refreshHab(k); floatText(pt, `+${k === 'w' ? fr(v, 0) + ' mL' : fr(v, 0) + ' g'}`, HAB[k].color); goalCheck(it, pt); },
+  habDel(id, el) { const it = S.intake.find(x => x.id === id); collapse(el && el.closest('.row'), () => { S.intake = S.intake.filter(x => x.id !== id); save(); if (it) refreshHab(it.k); }); },
   saveGoals() {
     const p = num(q('#g-p').value), w = num(q('#g-w').value), f = num(q('#g-f').value), s = num(q('#g-s').value);
     S.goals = { p: p >= 0 ? Math.round(p) : S.goals.p, w: w >= 0 ? Math.round(w * (w < 20 ? 1000 : 1)) : S.goals.w, f: f >= 0 ? Math.round(f) : S.goals.f, s: s >= 0 ? Math.round(s) : S.goals.s };
@@ -1281,16 +1392,17 @@ const A = {
     S.injections.push({ id: uid(), tid, dose, date, site: q('#i-body').dataset.sel || '', note: q('#i-note').value.trim() });
     const t = T(tid); if (t.stock !== '' && t.stock != null) t.stock = Math.max(0, num(t.stock) - 1);
     advancePen(t, date);
-    focusT = tid; save(); closeSheet(); render();
+    focusT = tid; save(); closeSheet(); firstHome = true; PREV.delete('ring:' + tid);
     const p = penInfo(t);
-    toast(p ? `Injection enregistrée, dose ${p.used} sur ${p.per} du stylo` : 'Injection enregistrée');
+    hud(p ? `Dose ${p.used} sur ${p.per}` : 'Injection notée', t.color);
+    setTimeout(() => { if (tab !== 'home') { tabDir = -1; tab = 'home'; tabPop = true; renderTabs(); } render(); scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' }); }, REDUCED ? 0 : 380);
   },
   newPen(id) { const t = T(id); t.pen = null; save(); closeSheet(); render(); toast('Le nouveau stylo démarrera à ta prochaine injection'); },
   saveW() {
     const kg = num(q('#w-kg').value), date = q('#w-date').value || today();
     if (!(kg >= 20 && kg <= 350)) return toast('Indique un poids en kg', true);
     S.weights = S.weights.filter(w => w.date !== date); S.weights.push({ id: uid(), date, kg: Math.round(kg * 10) / 10 });
-    save(); closeSheet(); render(); toast('Poids enregistré');
+    save(); closeSheet(); render(); haptic(); toast('Poids enregistré');
   },
   saveM() {
     const m = { id: uid(), date: q('#m-date').value || today() }; let any = false;
@@ -1302,7 +1414,7 @@ const A = {
     const sel = $$('#s-feel [aria-pressed="true"], .feel [aria-pressed="true"]', topS()).map(b => b.dataset.feel); if (!sel.length) return;
     const lb = q('#s-lvl [aria-pressed="true"]'), lv = lb ? +lb.dataset.lvl : 1, date = q('#s-date').value || today(), note = q('#s-note').value.trim();
     [...new Set(sel)].forEach(type => S.symptoms.push({ id: uid(), date, type, level: isEffect(type) ? lv : 0, note }));
-    save(); closeSheet(); render(); toast(sel.length > 1 ? 'Ressentis enregistrés' : 'Ressenti enregistré');
+    save(); closeSheet(); render(); haptic(); toast(sel.length > 1 ? 'Ressentis enregistrés' : 'Ressenti enregistré');
   },
   saveT() {
     const name = q('#t-name').value.trim(), int = num(q('#t-int').value);
@@ -1324,9 +1436,9 @@ const A = {
   },
   delEntry(ref) { const [k, id] = ref.split(':'); const old = S[k].slice(); S[k] = S[k].filter(x => x.id !== id); save(); closeSheet(); render(); toast('Entrée supprimée', false, () => { S[k] = old; save(); render(); }); },
   confirmOk() { const f = topS() && topS()._ok; f && f(); },
-  qAdd() { const v = q('#q-new').value.trim(); if (!v) return; S.questions.push({ id: uid(), text: v, done: false, date: today() }); save(); q('.body').innerHTML = questionsBody(); render(); const i = q('#q-new'); i && i.focus(); },
-  qToggle(id) { const x = S.questions.find(y => y.id === id); x.done = !x.done; save(); q('.body').innerHTML = questionsBody(); render(); },
-  qDel(id) { S.questions = S.questions.filter(y => y.id !== id); save(); q('.body').innerHTML = questionsBody(); render(); },
+  qAdd() { const v = q('#q-new').value.trim(); if (!v) return; const nid = uid(); S.questions.push({ id: nid, text: v, done: false, date: today() }); save(); q('.body').innerHTML = questionsBody(); render(); haptic(); const row = q(`[data-id="${nid}"]`); row && !REDUCED && row.closest('.qrow').animate([{ opacity: 0, transform: 'translateY(-10px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.2,.8,.2,1)' }); const i = q('#q-new'); i && i.focus(); },
+  qToggle(id, el) { const x = S.questions.find(y => y.id === id); x.done = !x.done; save(); if (x.done) haptic(); pop(el, 1.25); setTimeout(() => { q('.body').innerHTML = questionsBody(); render(); }, x.done ? 260 : 0); if (x.done) { const r = el.closest('.qrow'); r.dataset.done = 'true'; } },
+  qDel(id, el) { collapse(el && el.closest('.qrow'), () => { S.questions = S.questions.filter(y => y.id !== id); save(); q('.body').innerHTML = questionsBody(); render(); }); },
   qFrom(id) {
     const s = S.symptoms.find(x => x.id === id); if (!s) return;
     S.questions.push({ id: uid(), text: `${s.type}${s.level ? ' (' + LEVELS[s.level].toLowerCase() + ')' : ''} noté le ${dfmt(s.date, { day: 'numeric', month: 'long' })}${s.note ? ' : ' + s.note : ''}. Est-ce attendu, et que faire ?`, done: false, date: today() });
@@ -1342,7 +1454,7 @@ const A = {
     S.costs.push({ id: uid(), date: q('#c-d').value || today(), label: q('#c-l').value.trim(), paid, secu: num(q('#c-s').value) || 0, mut: num(q('#c-m').value) || 0 });
     save(); closeSheet(); const b = q('.body'); if (b) b.innerHTML = costsBody(); fillImgs(topS()); render(); toast('Achat ajouté');
   },
-  costDel(id) { S.costs = S.costs.filter(c => c.id !== id); save(); q('.body').innerHTML = costsBody(); fillImgs(topS()); render(); },
+  costDel(id, el) { collapse(el && el.closest('.row'), () => { S.costs = S.costs.filter(c => c.id !== id); save(); q('.body').innerHTML = costsBody(); fillImgs(topS()); render(); }); },
   addPhoto(kind) { const i = $('#photo-in'); i.dataset.kind = kind || 'body'; i.value = ''; i.click(); },
   viewPhoto(id) { fPhoto(id); },
   delPhoto(id) { confirmSheet('Supprimer la photo ?', 'Elle sera effacée de ce téléphone.', 'Supprimer', async () => { S.photos = S.photos.filter(p => p.id !== id); save(); try { await IDB.del(id); } catch (e) { } const u = URLS.get(id); if (u) URL.revokeObjectURL(u); URLS.delete(id); while (stack.length) closeSheet(); render(); }); },
@@ -1368,7 +1480,7 @@ const A = {
   wipe() { confirmSheet('Tout effacer ?', 'Traitements, injections, pesées, ressentis, habitudes et photos seront supprimés de cet appareil. Exporte une sauvegarde avant si tu veux les garder.', 'Tout effacer', async () => { localStorage.removeItem(KEY); try { for (const p of S.photos) await IDB.del(p.id); } catch (e) { } URLS.clear(); S = blank(); tab = 'home'; while (stack.length) closeSheet(true); document.body.classList.remove('locked'); render(); }); },
   obNext() { obGo(1); }, obBack() { obGo(-1); },
   obSkip() { const s = OBS[obStep]; if (s === 'name') ob.name = ''; if (s === 'dose') ob.dose = null; if (s === 'weight') ob.weight = null; if (s === 'goal') ob.goal = null; obGo(1); },
-  obOk() { ob.ok = !ob.ok; const b = $('.switch-row'); b.setAttribute('aria-checked', ob.ok); $('#ob-cta').disabled = !ob.ok; },
+  obOk() { ob.ok = !ob.ok; const b = $('.switch-row'); b.setAttribute('aria-checked', ob.ok); $('#ob-cta').disabled = !ob.ok; haptic(); },
   obDone
 };
 function dl(name, data, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); }
@@ -1383,29 +1495,37 @@ const SEL = '[data-act],[data-close],[data-tab],[data-focus],[data-jf],[data-ran
 document.addEventListener('click', e => {
   const el = e.target.closest(SEL); if (!el) return;
   const d = el.dataset;
-  if (d.act) return A[d.act] && A[d.act](d.id);
+  if (d.act) return A[d.act] && A[d.act](d.id, el);
   if ('close' in d) return closeSheet();
-  if (d.tab) { tab = d.tab; peek = false; render(); scrollTo(0, 0); return; }
-  if (d.focus) { focusT = d.focus; render(); return; }
-  if (d.jf) { jFilter = d.jf; render(); return; }
-  if (d.range !== undefined) { range = +d.range; render(); return; }
+  if (d.tab) {
+    const order = ['home', 'journal', 'progress', 'more'];
+    if (d.tab === tab) { scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' }); return; }
+    tabDir = order.indexOf(d.tab) >= order.indexOf(tab) ? 1 : -1; tab = d.tab; peek = false; animIn = true; tabPop = el.closest('#tabs') ? true : false;
+    if (d.tab === 'home') firstHome = true;
+    render(); scrollTo(0, 0); return;
+  }
+  if (d.focus) { focusT = d.focus; firstHome = true; render(); return; }
+  if (d.jf) { jFilter = d.jf; animIn = true; render(); return; }
+  if (d.range !== undefined) { range = +d.range; animIn = true; render(); return; }
   if (d.repd !== undefined) { openReport(+d.repd); return; }
   if (d.entry) { const [k, id] = d.entry.split(':'); return fEntry(k, id); }
-  if (d.habk) { q('.body').innerHTML = habBody(d.habk); return; }
-  if (d.add) { const [k, v, l] = d.add.split('|'); const it = addIntake(k, +v, l); refreshHab(k); toast(k === 's' ? 'Séance notée' : `+${k === 'w' ? v + ' mL' : v + ' g'} : ${l}`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); refreshHab(k); }); return; }
-  if (d.dose) { const w = el.parentNode; w.dataset.v = d.dose; $$('.pill', w).forEach(b => b.setAttribute('aria-pressed', b === el)); q('#i-dose').value = ''; return; }
+  if (d.habk) { const b = q('.body'); b.innerHTML = habBody(d.habk); animateCounts(b); syncSegs(b); if (!REDUCED) b.querySelector('[style*="--c"]').animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.2,.8,.2,1)' }); return; }
+  if (d.add) { const [k, v, l] = d.add.split('|'); const pt = center(el), tot = center(q('.hab-total')); pop(el, 1.06); haptic(); const it = addIntake(k, +v, l); refreshHab(k); floatText(pt, k === 's' ? '+1' : `+${k === 'w' ? v + ' mL' : v + ' g'}`, HAB[k].color); toast(k === 's' ? 'Séance notée' : l, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); refreshHab(k); }); goalCheck(it, tot || pt); return; }
+  if (d.dose) { const w = el.parentNode; w.dataset.v = d.dose; $$('.pill', w).forEach(b => b.setAttribute('aria-pressed', b === el)); q('#i-dose').value = ''; haptic(); return; }
   if (d.site) return pickSite(el);
   if (d.feel) {
     const all = $$('[data-feel]', topS()), on = el.getAttribute('aria-pressed') !== 'true';
     if (on) all.forEach(b => { if ((d.feel === GOOD) !== (b.dataset.feel === GOOD)) b.setAttribute('aria-pressed', 'false'); });
     el.setAttribute('aria-pressed', on);
     const sel = all.filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.dataset.feel), btn = q('[data-act="saveS"]');
-    q('#s-lvl-w').hidden = !sel.some(isEffect);
+    const lw = q('#s-lvl-w'), wasHidden = lw.hidden; lw.hidden = !sel.some(isEffect);
+    if (wasHidden && !lw.hidden) { syncSegs(lw); if (!REDUCED) lw.animate([{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }], { duration: 280 }); }
+    if (on) haptic();
     btn.disabled = !sel.length; btn.textContent = sel.length ? `Enregistrer${sel.length > 1 ? ' (' + sel.length + ')' : ''}` : 'Choisis au moins un ressenti';
     return;
   }
-  if (d.lvl || d.color) { $$('button', el.parentNode).forEach(b => b.setAttribute('aria-pressed', b === el)); return; }
-  if (d.injt) { q('.body').innerHTML = injBody(T(d.injt)); topS().style.setProperty('--c', T(d.injt).color); return; }
+  if (d.lvl || d.color) { $$('button', el.parentNode).forEach(b => b.setAttribute('aria-pressed', b === el)); syncSegs(el.parentNode.parentNode); haptic(); return; }
+  if (d.injt) { const b = q('.body'); b.innerHTML = injBody(T(d.injt)); topS().style.setProperty('--c', T(d.injt).color); syncSegs(b); return; }
   if (d.preset) {
     const p = PRESETS.find(x => x.key === d.preset); $$('.chip', el.parentNode).forEach(b => b.setAttribute('aria-pressed', b === el));
     q('#t-preset').value = p.key; q('#t-fields').innerHTML = tFields(Object.assign({ stock: q('#t-stock').value }, p, { preset: p.key }));
@@ -1413,13 +1533,14 @@ document.addEventListener('click', e => {
     return;
   }
   if (d.obp) { ob.preset = d.obp; ob.dose = null; render(); if (d.obp === 'custom') setTimeout(() => { const i = $('#ob-cn'); i && i.focus(); }, 60); return; }
-  if (d.obdose) { ob.dose = +d.obdose; $$('[data-obdose]').forEach(b => b.setAttribute('aria-pressed', b === el)); const i = $('#ob-d'); if (i) i.value = ''; obCta(); return; }
+  if (d.obdose) { ob.dose = +d.obdose; $$('[data-obdose]').forEach(b => b.setAttribute('aria-pressed', b === el)); const i = $('#ob-d'); if (i) i.value = ''; obCta(); haptic(); return; }
   if (d.oblast) { ob.last = /^\d+$/.test(d.oblast) ? +d.oblast : d.oblast; render(); if (d.oblast === 'date') setTimeout(() => { const i = $('#ob-ld'); i && i.focus(); }, 60); return; }
 });
 function pickSite(el) {
   const box = el.closest('#i-body'); if (!box) return;
   box.dataset.sel = el.dataset.site;
   $$('.zone', box).forEach(z => { z.classList.toggle('on', z === el); z.setAttribute('aria-pressed', z === el); });
+  pop(el, 1.3); haptic();
   const tid = q('#i-t').value; $('#i-cap', box).innerHTML = siteCap(tid, el.dataset.site, rotation(tid));
 }
 document.addEventListener('keydown', e => {
