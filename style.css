@@ -323,8 +323,8 @@ svg.chart{width:100%;height:auto;display:block;margin-top:8px;overflow:visible;t
 .hab .bubble .ic{width:18px;height:18px}
 .hab .m{flex:1;min-width:0}
 .hab .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px;font-weight:600}
-.hab .top span{font-family:var(--round);font-weight:600;color:var(--label2);font-size:14px;white-space:nowrap}
-.hab .top span b{color:var(--label);font-weight:700}
+.hab .top>span{font-family:var(--round);font-weight:600;color:var(--label2);font-size:14px;white-space:nowrap}
+.hab .top>span b{color:var(--label);font-weight:700}
 .hbar{height:6px;border-radius:3px;background:var(--fill);margin-top:7px;overflow:hidden}
 .hbar i{display:block;height:100%;border-radius:3px;background:var(--c);transition:width .35s ease}
 .plus{flex:none;width:38px;height:38px;border-radius:50%;background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--c);display:grid;place-items:center;transition:transform .12s}
@@ -332,7 +332,7 @@ svg.chart{width:100%;height:auto;display:block;margin-top:8px;overflow:visible;t
 .plus .ic{width:20px;height:20px;stroke-width:2.6}
 .hab-total{text-align:center;margin:6px 0 4px}
 .hab-total b{font-family:var(--round);font-size:52px;font-weight:700;letter-spacing:-.02em;color:var(--c)}
-.hab-total span{font-size:18px;font-weight:600;color:var(--label2);margin-left:4px}
+.hab-total>span{font-size:18px;font-weight:600;color:var(--label2);margin-left:4px}
 .hab-total+.hbar{height:8px;margin:6px 8px 4px}
 .portions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .portions button{background:var(--sheet-card);border-radius:13px;padding:11px 12px;text-align:left;display:flex;flex-direction:column;gap:2px;min-height:62px;transition:transform .1s}
@@ -692,3 +692,17 @@ html.sheet-open #bar{opacity:0}
 .hud-ok .ic{width:17px;height:17px;stroke-width:3.2}
 .hud-ok .ic path{stroke-dasharray:24;stroke-dashoffset:24;animation:ck .3s 1.2s ease-out forwards}
 @media (prefers-color-scheme:dark){.hud-ok{box-shadow:0 0 0 3px rgba(44,44,46,.9)}}
+
+/* Cadi : animation de repos (regard qui bouge) et expressions */
+.cadi .idle{position:absolute;inset:0;overflow:hidden;visibility:hidden}
+.cadi .idle img{width:1200%;max-width:none}
+.cadi.idling .still{visibility:hidden}
+.cadi.idling .idle{visibility:visible}
+.cadi.idling .idle img{animation:cadispin 2.04s steps(12) 1}
+.cadi .still{transform-origin:50% 85%}
+.cadi[data-expr="excited"] .cadi-h{filter:drop-shadow(0 0 2.5px rgba(255,92,141,.75))}
+.cadi[data-expr="sleepy"] .cadi-b{animation:cadibreath 4s ease-in-out infinite}
+@keyframes cadibreath{50%{transform:scale(1.025,.985)}}
+.hab-cadi{display:flex;justify-content:center;margin:2px 0 -6px}
+.alert.with-cadi{align-items:center}
+.alert.with-cadi>.cadi{margin:-4px -2px -4px -6px}
