@@ -168,21 +168,23 @@ function say(text, expr) {
 function hideSay() { const b = $('#say'); if (!b || b.hidden) return; b.classList.add('out'); const c = $('.hello .cadi'); if (c) setExpr(c, c.dataset.base); setTimeout(() => { b.hidden = true; b.classList.remove('out'); }, 250); }
 function cadiTips() {
   const tips = [], t = T(focusT) || active()[0], st = t ? status(t) : null, g = S.goals, h = new Date().getHours();
-  if (S.symptoms.some(s => s.level === 3 && daysBetween(s.date, today()) <= 1)) tips.push(['Pas facile en ce moment. Repose-toi, bois par petites gorgées, et si ça persiste ou t’inquiète, parles-en à ton médecin.', 'sleepy']);
-  if (t && st && st.last && st.dueIn === 0) tips.push([`C’est le jour J ! Zone conseillée : ${siteLabel(rotation(t.id).next).toLowerCase()}.`, 'excited']);
-  if (t && st && st.last && st.dueIn < 0) tips.push([`Ton injection était prévue ${relDay(new Date(st.due))}. En cas de doute, la notice et ton pharmacien sont là.`, 'worried']);
-  if (t && st && !st.last) tips.push(['Note ta première injection et je lance le compte à rebours.', 'excited']);
-  const p = t && penInfo(t); if (p && p.exp && p.expIn >= 0 && p.expIn <= 3 && !p.done) tips.push([`Ton stylo est à jeter ${relDay(p.exp)}.`, 'worried']);
-  if (S.appt && daysBetween(today(), S.appt) >= 0 && daysBetween(today(), S.appt) <= 7) tips.push([`Rendez-vous ${relDay(S.appt)}. Tes questions sont prêtes ?`, '']);
+  if (S.symptoms.some(s => s.level === 3 && daysBetween(s.date, today()) <= 1)) tips.push(['Pas facile en ce moment. Repose-toi, bois par petites gorgées, et parles-en à ton médecin si ça persiste.', 'sleepy', 'info', 'signes']);
+  if (t && st && st.last && st.dueIn === 0) tips.push([`C’est le jour J ! Zone conseillée : ${siteLabel(rotation(t.id).next).toLowerCase()}.`, 'excited', 'newInj', t.id]);
+  if (t && st && st.last && st.dueIn < 0) tips.push([`Ton injection était prévue ${relDay(new Date(st.due))}. La notice et ton pharmacien sont là en cas de doute.`, 'worried', 'note', 'late']);
+  if (t && st && !st.last) tips.push(['Note ta première injection et je lance le compte à rebours.', 'excited', 'newInj', t.id]);
+  const p = t && penInfo(t); if (p && p.exp && p.expIn >= 0 && p.expIn <= 3 && !p.done) tips.push([`Ton stylo est à jeter ${relDay(p.exp)}.`, 'worried', 'pen', t.id]);
+  if (S.appt && daysBetween(today(), S.appt) >= 0 && daysBetween(today(), S.appt) <= 7) tips.push([`Rendez-vous ${daysBetween(today(), S.appt) <= 1 ? relDay(S.appt) : dfmt(S.appt, { weekday: 'long', day: 'numeric' })}. Tes questions sont prêtes ?`, '', 'questions']);
   const allOk = ['p', 'w', 'f'].every(k => !(g[k] > 0) || intake(k) >= g[k]);
   if (allOk && S.intake.some(i => i.date === today())) tips.push(['Objectifs du jour atteints. Bravo ✨', 'party']);
   else {
-    if (g.w > 0 && h >= 12 && intake('w') < g.w * .5) tips.push([`Un verre d’eau ? Tu en es à ${habFmt('w', intake('w'))} aujourd’hui.`, 'water']);
-    if (g.p > 0 && h >= 12 && intake('p') < g.p * .5) tips.push([`Une portion de protéines au prochain repas ? ${habFmt('p', intake('p'))} sur ${g.p} g.`, '']);
+    if (g.w > 0 && h >= 12 && intake('w') < g.w * .5) tips.push([`Un verre d’eau ? Tu en es à ${habFmt('w', intake('w'))} aujourd’hui.`, 'water', 'hab', 'w']);
+    if (g.p > 0 && h >= 12 && intake('p') < g.p * .5) tips.push([`Des protéines au prochain repas ? ${habFmt('p', intake('p'))} sur ${g.p} g.`, '', 'hab', 'p']);
   }
-  if (g.s > 0 && sessionsWeek() < g.s && new Date().getDay() >= 4) { const r = g.s - sessionsWeek(); tips.push([`Encore ${r} séance${r > 1 ? 's' : ''} de renforcement cette semaine. Même courte, elle compte.`, 'excited']); }
+  if (g.s > 0 && sessionsWeek() < g.s && new Date().getDay() >= 4) { const r = g.s - sessionsWeek(); tips.push([`Encore ${r} séance${r > 1 ? 's' : ''} de renforcement cette semaine. Même courte, elle compte.`, 'excited', 'hab', 's']); }
   if (S.symptoms.some(s => s.type === GOOD && s.date === today())) tips.push(['Une journée sans souci, ça fait du bien.', 'calm']);
-  return tips.length ? tips : [['Un ressenti à noter ? Ça aide beaucoup pour le rendez-vous.', ''], ['Tout reste ici, sur ton téléphone. 🔒', 'calm'], ['Petit à petit, à ton rythme.', 'calm'], ['Pense à boire régulièrement, surtout s’il fait chaud.', 'water'], ['Pense à faire une sauvegarde de temps en temps, dans Plus.', '']];
+  const base = [['Petit à petit, à ton rythme.', 'calm'], ['Un ressenti à noter ? Ça aide beaucoup pour le rendez-vous.', '', 'newS'], ['Pense à boire régulièrement, surtout s’il fait chaud.', 'water', 'hab', 'w'], ['Tout reste ici, sur ton téléphone. 🔒', 'calm']];
+  for (const b of base) { if (tips.length >= 3) break; tips.push(b); }
+  return tips;
 }
 
 const SEGPREV = new Map();
@@ -586,6 +588,7 @@ const ILL_DEFS = `<svg class="ill-defs" width="0" height="0" aria-hidden="true" 
 <linearGradient id="il-pink" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB9D0"/><stop offset="1" stop-color="#EC427A"/></linearGradient>
 <radialGradient id="il-pinkr" cx=".34" cy=".36" r=".8"><stop offset="0" stop-color="#FFD6E3"/><stop offset=".38" stop-color="#FF77A3"/><stop offset="1" stop-color="#C0285E"/></radialGradient>
 <radialGradient id="il-sun" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#FFF7D1"/><stop offset=".45" stop-color="#FFD54D"/><stop offset="1" stop-color="#F09A14"/></radialGradient>
+<filter id="il-grain" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="2.1" numOctaves="1" seed="4" result="n"/><feColorMatrix in="n" type="saturate" values="0" result="m"/><feComposite in="m" in2="SourceGraphic" operator="in" result="mi"/><feComposite in="SourceGraphic" in2="mi" operator="arithmetic" k1="0" k2="1" k3=".34" k4="-.17"/></filter>
 </defs></svg>`;
 const ILL = {
   pen: `<ellipse cx="50" cy="85" rx="31" ry="6.5" fill="url(#il-sh)"/><g transform="rotate(40 48 46)">
@@ -643,21 +646,77 @@ function vHome() {
   if (act.length && !act.some(t => t.id === focusT)) focusT = act[0].id;
   const t0 = act.length ? T(focusT) : null, first = byDateDesc(S.injections).slice(-1)[0];
   const wk = first && act.length ? Math.floor(daysBetween(first.date, today()) / 7) + 1 : 0;
-  const hi = (S.profile.name ? `Bonjour ${esc(S.profile.name)}` : 'Bonjour') + (wk > 0 ? `, semaine ${wk} de ton traitement` : '');
-  let h = `<div class="hello">${cadiFor(t0, 58)}<div class="hd"><h1 class="lt" data-short="Aujourd’hui">${cap(dfmt(new Date()))}</h1><p class="hsub">${hi}</p></div><div class="say" id="say" role="status" hidden></div></div>`;
+  let h = `<div class="hello2"><div class="hd"><p class="kick">${cap(dfmt(new Date()))}${wk > 0 ? `, semaine ${wk}` : ''}</p><h1 class="lt" data-short="Aujourd’hui">${S.profile.name ? `Bonjour, ${esc(S.profile.name)}` : 'Bonjour'}</h1></div>
+    <div class="hbtns">${t0 ? `<button class="hb" data-act="ics" data-id="${t0.id}" aria-label="Ajouter les rappels d’injection au calendrier">${ic('bell')}</button>` : ''}<button class="hb" data-tab="journal" aria-label="Ouvrir le journal de la semaine">${ic('cal')}</button></div></div>`;
+  h += encCards(t0);
   mounts.push(() => {
-    const k = 'cadi-hello-' + today(), t = T(focusT), st = t ? status(t) : null;
-    let seen = false; try { seen = sessionStorage.getItem(k); sessionStorage.setItem(k, '1'); } catch (e) { }
-    const strong = S.symptoms.some(s => s.level === 3 && daysBetween(s.date, today()) <= 1);
-    if (!seen && ((st && st.last && st.dueIn <= 0) || strong)) setTimeout(() => { const [tx, ex] = cadiTips()[0]; say(tx, ex); cadiJelly($('.hello .cadi')); }, 900);
+    const k = 'cadi-hello-' + today(); let seen = false; try { seen = sessionStorage.getItem(k); sessionStorage.setItem(k, '1'); } catch (e) { }
+    if (!seen) setTimeout(() => cadiJelly($('.enc .cadi')), 900);
   });
-  if (!S.treatments.length) return h + `<div class="card empty">${cadi({ size: 84 })}<b>Aucun traitement en cours</b><p>Ajoute ton traitement pour suivre tes injections et ton rythme.</p><button class="btn" data-act="newT">Ajouter un traitement</button></div>` + habitCats();
-  if (!act.length) return h + maintenance() + dayCheck(today()) + notesCard(null, null) + habitCats();
+  if (!S.treatments.length) return h + `<div class="card empty">${cadi({ size: 84 })}<b>Aucun traitement en cours</b><p>Ajoute ton traitement pour suivre tes injections et ton rythme.</p><button class="btn" data-act="newT">Ajouter un traitement</button></div>` + actionsRow(null) + weekGlance() + habitCats();
+  if (!act.length) return h + maintenance() + dayCheck(today()) + actionsRow(null) + notesCard(null, null) + weekGlance() + habitCats();
   const t = t0, st = status(t);
   if (act.length > 1) h += `<div class="seg" style="margin-bottom:14px">${act.map(x => `<button data-focus="${x.id}" aria-pressed="${x.id === focusT}">${esc(x.name)}</button>`).join('')}</div>`;
-  h += bento(t, st) + dayCheck(today(), t) + notesCard(t, st) + cadenceCard(t) + habitCats();
+  h += bento(t, st) + dayCheck(today(), t) + actionsRow(t) + notesCard(t, st) + weekGlance() + cadenceCard(t) + habitCats();
   firstHome = false;
   return h;
+}
+/* Le mot de Cadi : grandes cartes colorées qui défilent */
+function encCards(t) {
+  const tips = cadiTips().slice(0, 4), tones = ['or', 'vi', 'pk', 'li'];
+  return `<div class="enc" id="enc" aria-label="Le mot de Cadi">${tips.map(([tx, ex, act, id], i) => {
+    const tag = act ? 'button' : 'div', attr = act ? ` data-act="${act}"${id ? ` data-id="${esc(id)}"` : ''}` : '';
+    const who = i === 0 ? cadiFor(t, 116) : `<img src="${exprSrc(ex)}" alt="" width="116" height="116" loading="lazy">`;
+    return `<${tag} class="ec ${tones[i % 4]}${tx.length > 48 ? ' long' : ''}"${attr}><span class="ec-tag">${i === 0 ? 'Le mot de Cadi' : 'Astuce'}</span><p class="ec-t">${esc(tx)}</p><span class="ec-c">${who}</span>${act ? `<span class="ec-go" aria-hidden="true">${ic('chev')}</span>` : ''}</${tag}>`;
+  }).join('')}</div>`;
+}
+/* Actions en pastilles */
+function actionsRow(t) {
+  const A2 = [
+    t ? ['newInj', t.id, 'pen', 'var(--inj)', 'Injection'] : ['newT', '', 'pen', 'var(--inj)', 'Traitement'],
+    ['newS', '', 'face', 'var(--ress)', 'Ressenti'],
+    ['quickW', '', 'water', 'var(--eau)', 'Un verre d’eau'],
+    ['hab', 'p', 'egg', 'var(--prot)', 'Protéines'],
+    ['newW', '', 'scale', 'var(--poids)', 'Poids'],
+    ['newM', '', 'ruler', 'var(--fib)', 'Mensurations'],
+    ['addPhoto', 'body', 'camera', 'var(--niv)', 'Photo'],
+    ['questions', '', 'question', 'var(--renfo)', 'Question']
+  ];
+  return `<div class="h2"><span>Actions</span><button class="h2go" data-act="fab" aria-label="Toutes les entrées">${ic('chev')}</button></div><div class="pas-row">${A2.map(([a, id, icn, c, l]) => `<button class="pas" data-act="${a}"${id ? ` data-id="${id}"` : ''} style="--c:${c}"><span class="pi">${ic(icn)}</span><b>${l}</b></button>`).join('')}</div>`;
+}
+/* Ta semaine en un coup d'œil : visages du jour, arc des ressentis, deux chiffres */
+const FACE = {
+  good: ['#C6EF6B', '<path d="M11.5 17.5q2.7-3.2 5.4 0M23.1 17.5q2.7-3.2 5.4 0"/><path d="M12.5 23.5q7.5 7.5 15 0" stroke-width="2.6"/><ellipse cx="9.5" cy="23" rx="2.6" ry="1.6" fill="#FF8FB0" stroke="none" opacity=".7"/><ellipse cx="30.5" cy="23" rx="2.6" ry="1.6" fill="#FF8FB0" stroke="none" opacity=".7"/>'],
+  leger: ['#FFE27A', '<circle cx="14.5" cy="17" r="1.9" fill="currentColor" stroke="none"/><circle cx="25.5" cy="17" r="1.9" fill="currentColor" stroke="none"/><path d="M15 25q5 3.6 10 0"/>'],
+  genant: ['#FFB48C', '<circle cx="14.5" cy="17.5" r="1.9" fill="currentColor" stroke="none"/><circle cx="25.5" cy="17.5" r="1.9" fill="currentColor" stroke="none"/><path d="M11.5 13l5 1.4M28.5 13l-5 1.4M15 26.2h10"/>'],
+  fort: ['#F46A55', '<path d="M11.5 14.5l5 2M28.5 14.5l-5 2"/><circle cx="14.8" cy="19" r="1.9" fill="currentColor" stroke="none"/><circle cx="25.2" cy="19" r="1.9" fill="currentColor" stroke="none"/><path d="M14 29q6-5.5 12 0"/>'],
+  none: ['', '<path d="M15 21h10" opacity=".45"/>']
+};
+const faceSvg = k => `<svg viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">${FACE[k][1]}</g></svg>`;
+const GNAME = { g: 'Tout va bien', d: 'Digestion', e: 'Énergie et humeur', a: 'Appétit', o: 'Autre' };
+const GCOL = { g: '#8FD96B', d: '#FFA05C', e: '#A493FF', a: '#FFCF45', o: '#F58DB5' };
+function weekGlance() {
+  const ws = weekStart(), te = today(), el = daysBetween(ws, te) + 1;
+  const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+  const faces = days.map((d, i) => {
+    const sy = S.symptoms.filter(x => x.date === d), eff = sy.filter(x => isEffect(x.type)), lv = eff.length ? Math.max(...eff.map(x => x.level || 1)) : 0;
+    const k = d > te ? 'fut' : !sy.length ? 'none' : !eff.length ? 'good' : ['', 'leger', 'genant', 'fort'][lv];
+    const lab = { fut: 'à venir', none: 'rien de noté', good: 'tout va bien', leger: 'effets légers', genant: 'effets gênants', fort: 'effets forts' }[k];
+    return `<button class="fc ${k}${d === te ? ' tdy' : ''}" data-act="goDay" data-id="${d}" aria-label="${cap(dfmt(d))} : ${lab}"><span class="fb"${FACE[k] && FACE[k][0] ? ` style="background:${FACE[k][0]}"` : ''}>${k === 'fut' ? '' : faceSvg(k)}</span><span class="fl">${WD[i]}</span></button>`;
+  }).join('');
+  const cur = S.symptoms.filter(x => x.date >= ws && x.date <= te), prev = S.symptoms.filter(x => x.date >= addDays(ws, -7) && x.date <= addDays(te, -7));
+  const G = {}, TY = {}; cur.forEach(x => { const f = feelOf(x.type), g = f ? f[3] : 'o'; G[g] = (G[g] || 0) + 1; TY[x.type] = TY[x.type] || { g, n: 0 }; TY[x.type].n++; });
+  const total = cur.length, top = Object.keys(G).sort((a, b) => G[b] - G[a])[0];
+  const segs = Object.entries(TY).sort((a, b) => 'gdeao'.indexOf(a[1].g) - 'gdeao'.indexOf(b[1].g) || b[1].n - a[1].n), seen = {};
+  const track = `<path d="${arcPath(60, 60, 46, -180, 0)}" class="atr"/>`; let arcs = '', a0 = -180;
+  segs.forEach(([, o]) => { const a1 = a0 + 180 * o.n / total, k = seen[o.g] = (seen[o.g] || 0) + 1; arcs += `<path d="${arcPath(60, 60, 46, a0 + (a0 > -180 ? 2 : 0), a1 - (a1 < 0 ? 2 : 0))}" stroke="color-mix(in srgb,${GCOL[o.g]} ${100 - (k - 1) * 22}%,#fff)" class="aseg" pathLength="1"/>`; a0 = a1; });
+  const effC = cur.filter(x => isEffect(x.type)).length, effP = prev.filter(x => isEffect(x.type)).length, dlt = effC - effP;
+  const fat = new Set(cur.filter(x => isEffect(x.type) && (feelOf(x.type) || [])[3] === 'e').map(x => x.date)).size, calm = el - fat;
+  return `<div class="h2"><span>Ta semaine en un coup d’œil</span></div>
+  <div class="wk-faces card"><div class="wk-h"><b>Humeur de la semaine</b><button data-tab="journal">Journal</button></div><div class="fcs">${faces}</div></div>
+  <button class="wk-arc card" ${total ? 'data-act="goProg" data-id="bien"' : 'data-act="newS"'}><svg viewBox="0 0 120 66" aria-hidden="true">${track}<g filter="url(#il-grain)">${arcs}</g></svg><span class="wk-t">${total ? `<small>Ressentis de la semaine</small><b>${GNAME[top]}</b><span class="pill">Le plus noté</span><span class="sub">${total} ressenti${total > 1 ? 's' : ''} noté${total > 1 ? 's' : ''}</span>` : `<small>Ressentis de la semaine</small><b>Rien encore</b><span class="sub">Note comment tu te sens, même quand tout va bien.</span>`}</span></button>
+  <div class="wk-nums"><button class="wk-n card" data-act="goProg" data-id="bien" style="--c:var(--niv)"><span class="h">Énergie${ic('chev')}</span><b>${calm}<small> / ${el} j</small></b><span class="s">sans fatigue notée</span></button>
+    <button class="wk-n card" data-act="goProg" data-id="bien" style="--c:var(--ress)"><span class="h">Effets${ic('chev')}</span><b>${effC}</b><span class="s${dlt < 0 ? ' good' : dlt > 0 ? ' bad' : ''}">${effP || effC ? (dlt === 0 ? 'comme la sem. passée' : `${dlt > 0 ? '+' : '−'}${Math.abs(dlt)} vs sem. passée`) : 'notés cette semaine'}</span></button></div>`;
 }
 function maintenance() {
   const w = weightsAsc(), last = w[w.length - 1], max = num(S.profile.maintMax), lastInj = byDateDesc(S.injections)[0];
@@ -767,7 +826,7 @@ function collectNotes(t, st) {
 }
 function notesCard(t, st) {
   const L = collectNotes(t, st).filter(o => o.key !== 'late'); if (!L.length) return '';
-  const shown = L.slice(0, 3), more = L.length - shown.length;
+  const shown = L.slice(0, 2), more = L.length - shown.length;
   return `<div class="h2"><span>À noter</span>${more ? `<button data-act="notesAll">Tout voir (${L.length})</button>` : ''}</div><div class="notes home-notes">${shown.map(o => `<button class="note" data-act="note" data-id="${esc(o.key)}" style="--c:${o.color}"><span class="nic${o.cadi ? ' cadi-ic' : ''}">${o.cadi ? `<img src="${exprSrc(o.cadi)}" alt="">` : ic(o.icon)}</span><span class="t"><b>${esc(o.title)}</b><span>${esc(o.sub)}</span></span>${ic('chev', 'chev')}</button>`).join('')}</div>`;
 }
 function fNote(key) {
@@ -1722,6 +1781,7 @@ const A = {
   note(k) { fNote(k); },
   notesAll() { const t = T(focusT), L = collectNotes(t, t ? status(t) : null); openSheet({ title: 'Rappels', left: 'Fermer', body: `<div class="group notes" style="margin-top:6px">${L.map(o => `<button class="row has-ic note" data-act="note" data-id="${esc(o.key)}">${o.cadi ? cadi({ size: 42, expr: o.cadi, act: '' }) : `<span class="bubble" style="--c:${o.color}">${ic(o.icon)}</span>`}<span class="t"><b>${esc(o.title)}</b><span>${esc(o.sub)}</span></span>${ic('chev', 'chev')}</button>`).join('')}</div>` }); },
   dismissNote(k) { S.dismissed[k] = true; save(); while (stack.length) closeSheet(); render(); toast('Rappel masqué'); },
+  goDay(d) { tabDir = 1; tab = 'journal'; jDay = d; animIn = true; tabPop = true; render(); scrollTo(0, 0); },
   goProg(sec) { tabDir = 1; tab = 'progress'; progSec = sec; animIn = true; tabPop = true; render(); scrollTo(0, 0); },
   profileSheet() { closeAllThen(fProfile); },
   replayRing(id) { PREV.delete('ring:' + id); PREV.delete('late:' + id); firstHome = true; haptic(); render(); },
