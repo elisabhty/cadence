@@ -322,6 +322,7 @@ function load() {
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Enregistrement impossible : stockage plein ou bloqué', true); } }
 
 let S = load();
+let progSec = 'trait';
 let tab = 'home', focusT = null, jFilter = 'all', range = 90, firstHome = true, peek = false, repDays = 90;
 let ob = null, obStep = 0, obShown = -1;
 let mounts = [];
@@ -463,7 +464,7 @@ function streakCard(t, full) {
   else msg = next ? `Encore <b>${next.count - c.cur}</b> injection${next.count - c.cur > 1 ? 's' : ''} pour <b>${next.label}</b> en rythme.` : `Plus d’un an en rythme. Chapeau ✨`;
   const earned = ms.filter(m => c.best >= m.count);
   return `<${full ? 'div' : 'button'} class="card streak${c.state === 'paused' ? ' paused' : ''}"${full ? '' : ` data-act="streak" data-id="${t.id}"`}>
-    <span class="top">${ic('cadence')}Ma cadence${c.best ? `<span class="rec">Record : ${c.best}</span>` : ''}</span>
+    ${full ? '' : `<span class="top">${ic('cadence')}Ma cadence${c.best ? `<span class="rec">Record : ${c.best}</span>` : ''}</span>`}
     <span class="big"><b>${c.state === 'paused' ? 'En pause' : cnt(k, c.cur, 'int', animIn ? 0 : undefined)}</b>${c.state === 'paused' ? '' : `<span>injection${c.cur > 1 ? 's' : ''} en rythme d’affilée</span>`}</span>
     <span class="chain">${chain}</span>
     ${next && c.state !== 'paused' ? `<span class="hbar" style="display:block;margin-top:14px"><i data-wk="${k}" data-w="${pct.toFixed(1)}" style="width:${pct.toFixed(0)}%"></i></span>` : ''}
@@ -581,17 +582,14 @@ function vHome() {
     const strong = S.symptoms.some(s => s.level === 3 && daysBetween(s.date, today()) <= 1);
     if (!seen && ((st && st.last && st.dueIn <= 0) || strong)) setTimeout(() => { const [tx, ex] = cadiTips()[0]; say(tx, ex); cadiJelly($('.hello .cadi')); }, 900);
   });
-  if (!S.treatments.length) return h + `<div class="card empty">${cadi({ size: 84 })}<b>Aucun traitement en cours</b><p>Ajoute ton traitement pour suivre tes injections, ta rotation et ton niveau estimé.</p><button class="btn" data-act="newT">Ajouter un traitement</button></div>` + habitsCard();
-  if (!act.length) { h += maintenance(); h += homeAlerts(null); h += habitsCard(); h += `<div class="grid">${tileWeight()}${tileFeel()}</div>`; return h + lateAlerts(); }
-  if (!act.some(t => t.id === focusT)) focusT = act[0].id;
+  if (!S.treatments.length) return h + `<div class="card empty">${cadi({ size: 84 })}<b>Aucun traitement en cours</b><p>Ajoute ton traitement pour suivre tes injections et ton rythme.</p><button class="btn" data-act="newT">Ajouter un traitement</button></div>` + habitsCard();
+  if (!act.length) { h += maintenance() + notesCard(null, null) + habitsCard() + `<h2 class="h2">Mon suivi</h2><div class="grid">${tileWeight()}${tileFeel()}</div>`; return h; }
   const t = T(focusT), st = status(t);
   if (act.length > 1) h += `<div class="seg" style="margin-bottom:12px">${act.map(x => `<button data-focus="${x.id}" aria-pressed="${x.id === focusT}">${esc(x.name)}</button>`).join('')}</div>`;
   h += hero(t, st);
-  h += streakCard(t);
-  h += homeAlerts(t, st);
+  h += notesCard(t, st);
   h += habitsCard();
-  h += `<div class="grid">${tileWeight()}${tileLevel(t, st)}${tileFeel()}${tilePen(t, st)}</div>`;
-  h += lateAlerts();
+  h += `<h2 class="h2">Mon suivi</h2><div class="grid">${tileWeight()}${tileFeel()}</div>`;
   firstHome = false;
   return h;
 }
@@ -606,57 +604,75 @@ function maintenance() {
 }
 function hero(t, st) {
   const rot = rotation(t.id), anim = firstHome && !REDUCED;
-  let center, when, meta, ring, cls = '';
+  let center, when, whenL = '', ring, cls = '', chips = '', primary = true;
   if (!st.last) {
     const n = interval(t);
     ring = ringArcs(n, 0, -1, false, anim);
     center = `<div class="n">${ic('pen')}</div><div class="u">Aucune injection notée</div>`;
     when = 'Note ta première injection';
-    meta = 'Le compte à rebours démarre ensuite, ' + freqTxt(n) + '.';
+    chips = `<span class="hchip">${freqTxt(n)}</span>`;
   } else {
     const { n, elapsed, dueIn, last } = st, late = dueIn < 0, due = dueIn === 0;
+    primary = late || due;
     ring = ringArcs(n, late || due ? n : Math.min(elapsed, n), late || due ? -1 : elapsed, late, anim);
     if (late) { cls = ' late'; center = `<div class="n">${cnt('late:' + t.id, -dueIn, 'int', anim ? 0 : undefined)}</div><div class="u">jour${-dueIn > 1 ? 's' : ''} de retard</div>`; }
     else if (due) { cls = ' due'; center = `<div class="n w">Jour J</div><div class="u">c’est aujourd’hui</div>`; }
-    else center = `<div class="n">${cnt('ring:' + t.id, dueIn, 'int', anim ? n : undefined)}</div><div class="u">${dueIn > 1 ? 'jours restants' : 'jour restant'}</div>${n > 1 ? `<div class="d">jour ${elapsed + 1} sur ${n}</div>` : ''}`;
-    when = (late || due ? 'Injection prévue ' : 'Prochaine injection ') + relDay(new Date(st.due));
-    meta = `Dernière : ${fmtDose(last.dose, esc(t.unit))}, ${relDay(last.date)}.<br>Zone conseillée : ${siteLabel(rot.next).toLowerCase()}.`;
+    else center = `<div class="n">${cnt('ring:' + t.id, dueIn, 'int', anim ? n : undefined)}</div><div class="u">${dueIn > 1 ? 'jours restants' : 'jour restant'}</div>`;
+    whenL = late || due ? 'Injection prévue' : 'Prochaine injection';
+    when = due ? 'Aujourd’hui' : cap(relDay(new Date(st.due)));
+    const p = penInfo(t), stock = t.stock !== '' && t.stock != null ? num(t.stock) : null;
+    chips = `<span class="hchip" title="Dose actuelle">${ic('pen')}${fmtDose(last.dose, esc(t.unit))}</span><span class="hchip" title="Zone conseillée">${ic('target')}${siteLabel(rot.next)}</span>`
+      + (p ? `<button class="hchip${p.done || (p.expIn !== null && p.expIn <= 3) ? ' warn' : ''}" data-act="editT" data-id="${t.id}" title="Stylo en cours">${ic('box')}Stylo ${Math.min(p.used, p.per)}/${p.per}</button>`
+        : stock !== null ? `<button class="hchip${stock <= 1 ? ' warn' : ''}" data-act="editT" data-id="${t.id}">${ic('box')}${fr(stock, 0)} en stock</button>` : '');
   }
+  const c = cadenceOf(t);
+  const cad = c.state === 'none' ? '' : `<button class="hero-cad" data-act="streak" data-id="${t.id}"><span class="mini">${c.marks.slice(-5).map((m, i, a) => `<i class="${m.kind}${c.state === 'paused' || (a.length - i > c.cur) ? ' old' : ''}"></i>`).join('')}</span><span class="tx">${c.state === 'paused' ? '<b>Série en pause</b>, elle repart à la prochaine injection' : `<b>${c.cur} injection${c.cur > 1 ? 's' : ''}</b> en rythme d’affilée`}</span>${ic('chev', 'chev')}</button>`;
   return `<section class="card hero" style="--c:${esc(t.color)}">
     <div class="ring${anim ? ' anim' : ''}${cls}" data-act="replayRing" data-id="${t.id}"><svg viewBox="0 0 236 236" aria-hidden="true">${ring}</svg><div class="c">${center}</div></div>
-    <p class="when">${cap(when)}</p><p class="meta">${meta}</p>
-    <div class="acts"><button class="btn" data-act="newInj" data-id="${t.id}">${ic('pen')}Noter l’injection</button>${st.last ? `<button class="btn tint sq" data-act="ics" data-id="${t.id}" aria-label="Ajouter les rappels au calendrier">${ic('bell')}</button>` : ''}</div>
+    ${whenL ? `<p class="when-l">${whenL}</p>` : ''}<p class="when">${cap(when)}</p>
+    <div class="hchips">${chips}</div>
+    <div class="acts"><button class="btn${primary ? '' : ' tint'}" data-act="newInj" data-id="${t.id}">${ic('pen')}Noter l’injection</button>${st.last ? `<button class="btn tint sq" data-act="ics" data-id="${t.id}" aria-label="Ajouter les rappels au calendrier">${ic('bell')}</button>` : ''}</div>
+    ${cad}
   </section>`;
 }
-function homeAlerts(t, st) {
-  let h = '';
-  if (t && st && st.last && st.dueIn < 0) {
-    h += alertBox({ c: 'var(--red)', icon: 'info', cadi: 'worried', title: 'Injection oubliée ou décalée ?', text: (MISS[t.preset] || 'Les consignes en cas d’oubli figurent dans la notice de ton traitement.') + ' En cas de doute, demande à ton pharmacien.', acts: [{ label: 'Noter l’injection', act: 'newInj', id: t.id }] });
+/* « À noter » : une liste courte et triée, le détail s'ouvre au toucher */
+const NOTES = {};
+function collectNotes(t, st) {
+  const L = [], add = o => { NOTES[o.key] = o; L.push(o); };
+  const strong = S.symptoms.find(x => x.level === 3 && daysBetween(x.date, today()) <= 3);
+  if (strong) add({ key: 'strong', pri: 1, color: 'var(--red)', cadi: 'sleepy', title: `Ressenti fort : ${strong.type.toLowerCase()}`, sub: 'S’il persiste, parles-en à ton médecin', text: `<p>Tu as noté « ${esc(strong.type.toLowerCase())} » avec une intensité forte ${relDay(strong.date)}.</p><p>S’il persiste ou t’inquiète, parles-en à ton médecin ou ton pharmacien.</p><p><b>En cas d’urgence, appelle le 15.</b></p>`, acts: [['Quand consulter', 'info', 'signes'], ['Ajouter à mes questions', 'qFrom', strong.id]] });
+  if (t && st && st.last && st.dueIn < 0) add({ key: 'late', pri: 2, color: 'var(--red)', cadi: 'worried', title: 'Injection à rattraper ?', sub: `Elle était prévue ${relDay(new Date(st.due))}`, text: `<p>${MISS[t.preset] || 'Les consignes en cas d’oubli figurent dans la notice de ton traitement (rubrique 3).'}</p><p>En cas de doute, demande à ton pharmacien.</p>`, acts: [['Noter l’injection', 'newInj', t.id]] });
+  if (S.appt && daysBetween(today(), S.appt) >= 0 && daysBetween(today(), S.appt) <= 7) {
+    const open = S.questions.filter(x => !x.done).length;
+    add({ key: 'appt', pri: 3, color: 'var(--inj)', icon: 'steth', title: `Rendez-vous ${relDay(S.appt)} à ${tfmt(S.appt)}`, sub: open ? `${open} question${open > 1 ? 's' : ''} préparée${open > 1 ? 's' : ''}` : 'Prépare tes questions et ton rapport', text: '<p>Tes questions et ton rapport sont prêts à être consultés ou imprimés.</p>', acts: [['Mes questions', 'questions'], ['Rapport pour le médecin', 'report']] });
   }
+  const p = t && penInfo(t);
+  if (p && p.done) add({ key: 'pen', pri: 4, color: 'var(--inj)', icon: 'pen', title: 'Stylo terminé', sub: 'Ta prochaine injection démarre un nouveau stylo', text: '<p>Il reste un peu de liquide dans le stylo : c’est normal, ce n’est pas une dose complète et il ne faut pas l’injecter.</p><p class="src">Source : Lilly, Mounjaro KwikPen.</p>', acts: [['Voir le stylo', 'editT', t.id]] });
+  else if (p && p.exp && p.expIn <= 3) add({ key: 'pen', pri: 4, color: 'var(--inj)', icon: 'pen', title: p.expIn < 0 ? 'Stylo à jeter' : `Stylo à jeter ${relDay(p.exp)}`, sub: `${p.per - p.used} dose${p.per - p.used > 1 ? 's' : ''} non utilisée${p.per - p.used > 1 ? 's' : ''}`, text: `<p>Ce stylo a été ouvert ${relDay(p.opened)}. La notice prévoit de le jeter ${t.penDays} jours après la première utilisation, même s’il reste du médicament.</p>`, acts: [['Voir le stylo', 'editT', t.id]] });
+  const stock = t && t.stock !== '' && t.stock != null ? num(t.stock) : null;
+  if (stock !== null && stock <= 1) add({ key: 'stock', pri: 5, color: 'var(--ress)', icon: 'box', title: stock ? `Plus qu’${stock === 1 ? 'une dose' : stock + ' doses'} en stock` : 'Stock épuisé', sub: 'Pense à l’ordonnance et au volet 3', text: '<p>Pense à renouveler ton traitement à temps. Pour être remboursée, présente le volet 3 du formulaire d’accompagnement à la pharmacie.</p>', acts: [['Dépenses et remboursement', 'costs'], ['Modifier le stock', 'editT', t.id]] });
   if (t && st && st.last) {
-    const inj = injOf(t.id), last = inj[0], prev = inj[1];
-    const up = !prev ? false : last.dose > prev.dose;
-    const key = 'palier:' + last.id;
-    if (up && daysBetween(last.date, today()) < 28 && !S.dismissed[key]) {
-      let txt = `Les effets digestifs reviennent souvent quelques jours après une augmentation de dose. Note-les pour en parler à ton médecin.`;
-      if (S.settings.female && t.preset === 'mounjaro') txt += `<br><br>Contraception : la notice de Mounjaro conseille, si tu prends une pilule, d’utiliser une méthode non orale ou d’ajouter une méthode barrière pendant 4 semaines après chaque augmentation de dose. Parles-en à ton médecin.`;
-      h += alertBox({ title: `Nouveau palier : ${fmtDose(last.dose, esc(t.unit))}`, text: txt, dismiss: key });
+    const inj = injOf(t.id), last = inj[0], prev = inj[1], key = 'palier:' + last.id;
+    if (prev && last.dose > prev.dose && daysBetween(last.date, today()) < 28 && !S.dismissed[key]) {
+      let txt = '<p>Les effets digestifs reviennent souvent quelques jours après une augmentation de dose. Note-les : ça t’aidera à en parler à ton médecin.</p>';
+      if (S.settings.female && t.preset === 'mounjaro') txt += '<p><b>Contraception :</b> la notice de Mounjaro conseille, si tu prends une pilule, d’utiliser une méthode non orale ou d’ajouter une méthode barrière pendant 4 semaines après chaque augmentation de dose. Parles-en à ton médecin.</p>';
+      add({ key, pri: 6, color: 'var(--niv)', icon: 'info', title: `Nouveau palier : ${fmtDose(last.dose, t.unit)}`, sub: 'Ce qui peut changer les premiers jours', text: txt, acts: [['Noter un ressenti', 'newS']], dismiss: key });
     }
   }
-  const strong = S.symptoms.find(s => s.level === 3 && daysBetween(s.date, today()) <= 3);
-  if (strong) h += alertBox({ c: 'var(--red)', icon: 'alert', cadi: 'sleepy', title: `Ressenti fort : ${esc(strong.type.toLowerCase())}`, text: 'S’il persiste ou t’inquiète, parles-en à ton médecin ou ton pharmacien. En cas d’urgence, appelle le 15.', acts: [{ label: 'Quand consulter', act: 'info', id: 'signes' }, { label: 'Ajouter à mes questions', act: 'qFrom', id: strong.id }] });
-  return h;
+  if (S.rxEnd && daysBetween(today(), S.rxEnd) <= 10) add({ key: 'rx', pri: 7, color: 'var(--inj)', icon: 'doc', title: daysBetween(today(), S.rxEnd) < 0 ? 'Ordonnance expirée' : `Ordonnance jusqu’au ${dfmt(S.rxEnd, { day: 'numeric', month: 'long' })}`, sub: 'Pense à la faire renouveler', text: '<p>Prends rendez-vous à temps pour renouveler ton ordonnance.</p>', acts: [['Prendre note du rendez-vous', 'appt'], ['Modifier la date', 'costs']] });
+  const n = S.injections.length + S.weights.length + S.symptoms.length, bk = 'backup:' + today().slice(0, 7);
+  if (n >= 10 && (!S.lastBackup || daysBetween(S.lastBackup, today()) > 30) && !S.dismissed[bk]) add({ key: bk, pri: 8, color: 'var(--label2)', icon: 'share', title: 'Sauvegarde ton carnet', sub: 'Une fois par mois suffit', text: '<p>Tes données ne sont que sur ce téléphone. Exporte une sauvegarde de temps en temps pour ne rien perdre.</p>', acts: [['Exporter maintenant', 'exp']], dismiss: bk });
+  return L.sort((a, b) => a.pri - b.pri);
 }
-function lateAlerts() {
-  let h = '';
-  if (S.appt && daysBetween(today(), S.appt) >= 0 && daysBetween(today(), S.appt) <= 10) {
-    const open = S.questions.filter(x => !x.done).length;
-    h += alertBox({ c: 'var(--inj)', icon: 'steth', title: `Rendez-vous ${relDay(S.appt)} à ${tfmt(S.appt)}`, text: open ? `${open} question${open > 1 ? 's' : ''} préparée${open > 1 ? 's' : ''}.` : 'Prépare tes questions et ton rapport.', acts: [{ label: 'Mes questions', act: 'questions' }, { label: 'Rapport', act: 'report' }] });
-  }
-  if (S.rxEnd && daysBetween(today(), S.rxEnd) <= 10) h += alertBox({ c: 'var(--inj)', icon: 'doc', title: daysBetween(today(), S.rxEnd) < 0 ? 'Ordonnance expirée' : `Ordonnance jusqu’au ${dfmt(S.rxEnd, { day: 'numeric', month: 'long' })}`, text: 'Pense à prendre rendez-vous pour la renouveler.', acts: [{ label: 'Modifier', act: 'costs' }] });
-  const n = S.injections.length + S.weights.length + S.symptoms.length, key = 'backup:' + today().slice(0, 7);
-  if (n >= 10 && (!S.lastBackup || daysBetween(S.lastBackup, today()) > 30) && !S.dismissed[key]) h += alertBox({ icon: 'share', title: 'Pense à sauvegarder ton carnet', text: 'Tes données ne sont que sur ce téléphone. Une sauvegarde par mois suffit.', acts: [{ label: 'Exporter maintenant', act: 'exp' }], dismiss: key });
-  return h;
+function notesCard(t, st) {
+  const L = collectNotes(t, st); if (!L.length) return '';
+  const shown = L.slice(0, 3), more = L.length - shown.length;
+  return `<h2 class="h2">À noter</h2><div class="group notes">${shown.map(o => `<button class="row has-ic note" data-act="note" data-id="${esc(o.key)}">${o.cadi ? cadi({ size: 42, expr: o.cadi, act: '' }) : `<span class="bubble" style="--c:${o.color}">${ic(o.icon)}</span>`}<span class="t"><b>${esc(o.title)}</b><span>${esc(o.sub)}</span></span>${ic('chev', 'chev')}</button>`).join('')}
+    ${more ? `<button class="row note-more" data-act="notesAll">Voir ${more} autre${more > 1 ? 's' : ''} rappel${more > 1 ? 's' : ''}${ic('chev', 'chev')}</button>` : ''}</div>`;
+}
+function fNote(key) {
+  const o = NOTES[key]; if (!o) return;
+  openSheet({ title: o.title, left: 'Fermer', small: true, body: `${o.cadi ? `<div class="center" style="margin:2px 0 6px">${cadi({ size: 86, expr: o.cadi })}</div>` : ''}<div class="doc">${o.text}</div><div class="stack" style="margin-top:16px">${o.acts.map((a, i) => `<button class="btn${i ? ' tint' : ''}" data-act="${a[1]}"${a[2] ? ` data-id="${esc(a[2])}"` : ''}>${a[0]}</button>`).join('')}${o.dismiss ? `<button class="linkbtn" data-act="dismissNote" data-id="${esc(o.dismiss)}">Masquer ce rappel</button>` : ''}</div>` });
 }
 function habitsCard() {
   const g = S.goals, row = (k, val, goal, sub) => {
@@ -670,8 +686,8 @@ function habitsCard() {
 }
 function tileWeight() {
   const w = weightsAsc(), last = w[w.length - 1];
-  if (hidden() && last) return `<button class="tile" style="--c:var(--poids)" data-tab="progress"><span class="h">${ic('scale')}Poids</span><span class="v">${ic('eye')}</span><span class="s">Chiffres masqués. Pesée ${relDay(last.date)}.</span></button>`;
-  return `<button class="tile" style="--c:var(--poids)" data-tab="progress"><span class="h">${ic('scale')}Poids</span>
+  if (hidden() && last) return `<button class="tile" style="--c:var(--poids)" data-act="goProg" data-id="poids"><span class="h">${ic('scale')}Poids</span><span class="v">${ic('eye')}</span><span class="s">Chiffres masqués. Pesée ${relDay(last.date)}.</span></button>`;
+  return `<button class="tile" style="--c:var(--poids)" data-act="goProg" data-id="poids"><span class="h">${ic('scale')}Poids</span>
     ${last ? `<span class="v">${cnt('tw', last.kg, 'd1')}<small>kg</small></span><span class="s">${w.length > 1 ? sgn(last.kg - w[0].kg) + ' kg depuis le début' : 'Pesée ' + relDay(last.date)}</span>${spark(w.slice(-12).map(x => x.kg), 'var(--poids)')}`
       : `<span class="v">–</span><span class="s">Note ta première pesée</span>`}</button>`;
 }
@@ -687,7 +703,7 @@ function tileFeel() {
   if (!S.symptoms.length) { v = '–'; s = 'Comment tu te sens ?'; }
   else if (!bad.length) { v = '✨'; s = 'Aucun effet noté cette semaine'; }
   else { v = `${bad.length}<small>cette semaine</small>`; s = `Dernier : ${esc(last.type.toLowerCase())}${last.level ? ', ' + LEVELS[last.level].toLowerCase() : ''}`; }
-  return `<button class="tile" style="--c:var(--ress)" data-act="newS"><span class="h">${ic('face')}Ressentis</span><span class="v">${v}</span><span class="s">${s}</span></button>`;
+  return `<button class="tile" style="--c:var(--ress)" data-act="goProg" data-id="bien"><span class="h">${ic('face')}Ressentis</span><span class="v">${v}</span><span class="s">${s}</span></button>`;
 }
 function tilePen(t, st) {
   const p = penInfo(t), stock = t.stock !== '' && t.stock != null ? num(t.stock) : null;
@@ -744,7 +760,10 @@ function row(it, prevW) {
 
 /* ---------- Progrès ---------- */
 function vProgress() {
-  let h = `<h1 class="lt">Progrès</h1><div class="seg">${[[30, '1 mois'], [90, '3 mois'], [180, '6 mois'], [0, 'Tout']].map(([k, l]) => `<button data-range="${k}" aria-pressed="${range === k}">${l}</button>`).join('')}</div>`;
+  let h = `<h1 class="lt">Progrès</h1><div class="seg seg-main">${[['trait', 'Traitement'], ['poids', 'Corps'], ['bien', 'Bien-être']].map(([k, l]) => `<button data-psec="${k}" aria-pressed="${progSec === k}">${l}</button>`).join('')}</div>`;
+  if (progSec === 'trait') return h + progTreatment();
+  if (progSec === 'bien') return h + progWellbeing();
+  h += `<div class="seg seg-sub">${[[30, '1 mois'], [90, '3 mois'], [180, '6 mois'], [0, 'Tout']].map(([k, l]) => `<button data-range="${k}" aria-pressed="${range === k}">${l}</button>`).join('')}</div>`;
   const all = weightsAsc(), from = range ? Date.now() - range * DAY : -Infinity;
   const ws = all.filter(w => D(w.date).getTime() >= from);
   h += `<h2 class="h2">Poids <button data-act="newW">Ajouter</button></h2>`;
@@ -764,37 +783,45 @@ function vProgress() {
   }
   h += measuresCard();
   h += photosCard();
+  return h;
+}
+function progTreatment() {
+  let h = '';
   const act = active(); if (act.length && !act.some(t => t.id === focusT)) focusT = act[0].id;
   const t = T(focusT) || S.treatments[0];
-  if (t) {
-    h += `<h2 class="h2">${esc(t.name)}</h2>`;
-    if (act.length > 1) h += `<div class="seg" style="margin-bottom:12px">${act.map(x => `<button data-focus="${x.id}" aria-pressed="${x.id === t.id}">${esc(x.name)}</button>`).join('')}</div>`;
+  if (!t) return `<div class="card empty" style="margin-top:14px">${cadi({ size: 84 })}<b>Aucun traitement</b><p>Ajoute ton traitement pour suivre ton rythme et tes paliers.</p><button class="btn" data-act="newT">Ajouter un traitement</button></div>`;
+  {
+    if (act.length > 1) h += `<div class="seg" style="margin:12px 0 0">${act.map(x => `<button data-focus="${x.id}" aria-pressed="${x.id === t.id}">${esc(x.name)}</button>`).join('')}</div>`;
     const inj = injOf(t.id);
-    if (num(t.halfLifeH) > 0 && inj.length) h += `<div class="card chart-card" style="--c:${esc(t.color)}">${levelChart(t)}<p class="foot-note" style="margin:10px 0 0">Courbe théorique calculée avec une demi-vie de ${fr(t.halfLifeH, 0)} h. Elle ne reflète pas ton taux réel.</p></div>`;
-    if (inj.length) h += `<p class="lab">Paliers de dose</p><div class="group">${steps(t).reverse().map((s, i) => `<div class="row"><span class="t"><b class="num" style="font-size:17px">${fmtDose(s.dose, esc(t.unit))}</b><span>${i === 0 ? 'Depuis le' : 'À partir du'} ${dfmt(s.from, { day: 'numeric', month: 'long' })}</span></span><span style="font-size:15px;color:var(--label2)">${s.n} injection${s.n > 1 ? 's' : ''}</span></div>`).join('')}</div>`;
+    if (inj.length) h += `<h2 class="h2" id="cadence-sec">Ma cadence</h2>${streakCard(t, true)}`;
+    if (num(t.halfLifeH) > 0 && inj.length) h += `<h2 class="h2">Niveau estimé</h2><div class="card chart-card" style="--c:${esc(t.color)}">${levelChart(t)}<p class="foot-note" style="margin:10px 0 0">Courbe théorique calculée avec une demi-vie de ${fr(t.halfLifeH, 0)} h. Elle ne reflète pas ton taux réel.</p></div>`;
+    if (inj.length) h += `<h2 class="h2">Paliers de dose</h2><div class="group">${steps(t).reverse().map((s, i) => `<div class="row"><span class="t"><b class="num" style="font-size:17px">${fmtDose(s.dose, esc(t.unit))}</b><span>${i === 0 ? 'Depuis le' : 'À partir du'} ${dfmt(s.from, { day: 'numeric', month: 'long' })}</span></span><span style="font-size:15px;color:var(--label2)">${s.n} injection${s.n > 1 ? 's' : ''}</span></div>`).join('')}</div>`;
     else h += `<div class="card empty">${cadi({ size: 72, done: 0 })}<b>Aucune injection notée</b><p>Le niveau estimé et tes paliers de dose apparaîtront ici.</p><button class="btn" data-act="newInj" data-id="${t.id}">Noter une injection</button></div>`;
-    if (inj.length) h += `<p class="lab" id="cadence-sec">Ma cadence</p>${streakCard(t, true)}`;
     h += effectsByDay(t);
   }
-  h += habitsHistory();
+  return h;
+}
+function progWellbeing() {
+  let h = '';
+  h += habitsHistory() || `<h2 class="h2">Habitudes</h2><div class="card empty">${cadi({ size: 72, expr: 'water' })}<b>Rien de noté pour l’instant</b><p>Note tes protéines, ton eau et tes fibres depuis l’accueil : tes 14 derniers jours apparaîtront ici.</p><button class="btn" data-act="hab" data-id="p">Noter une habitude</button></div>`;
   const d30 = S.symptoms.filter(s => daysBetween(s.date, today()) < 30);
   if (d30.length) {
     const cnt = {}; d30.filter(s => isEffect(s.type)).forEach(s => cnt[s.type] = (cnt[s.type] || 0) + 1);
     const top5 = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 6), mx = top5.length ? top5[0][1] : 1, good = d30.filter(s => s.type === GOOD).length;
     h += `<h2 class="h2">Ressentis <button data-act="newS">Ajouter</button></h2><div class="card chart-card"><p class="readout" style="min-height:0"><span class="d">Sur les 30 derniers jours${good ? `, dont ${good} journée${good > 1 ? 's' : ''} sans souci` : ''}</span></p>
       ${top5.length ? top5.map(([k, v]) => `<div class="freq"><span class="e">${emo(k)}</span><span class="k">${esc(k)}</span><span class="b"><i style="width:${v / mx * 100}%"></i></span><span class="n">${v}</span></div>`).join('') : `<p style="font-size:15px;margin-top:6px">Aucun effet indésirable noté ✨</p>`}</div>`;
-  }
+  } else h += `<h2 class="h2">Ressentis</h2><div class="card empty">${cadi({ size: 72, expr: 'calm' })}<b>Aucun ressenti ce mois-ci</b><p>Note ce que tu ressens : tu verras ici ce qui revient le plus souvent.</p><button class="btn ress" data-act="newS">Noter un ressenti</button></div>`;
   return h;
 }
 function effectsByDay(t) {
   const { rows, n } = effectStats(t);
   if (n < 2 || n > 14) return '';
-  if (rows.length < 3) return `<p class="lab">Effets selon le jour d’injection</p><div class="card chart-card"><p style="font-size:15px;color:var(--label2);line-height:1.4">Note tes ressentis quelques semaines : tu verras ici à quels jours après l’injection ils reviennent, et s’ils changent avec le palier.</p></div>`;
+  if (rows.length < 3) return `<h2 class="h2">Effets selon le jour</h2><div class="card chart-card"><p style="font-size:15px;color:var(--label2);line-height:1.4">Note tes ressentis quelques semaines : tu verras ici à quels jours après l’injection ils reviennent, et s’ils changent avec le palier.</p></div>`;
   const cnt = {}; rows.forEach(r => cnt[r.type] = (cnt[r.type] || 0) + 1);
   const types = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 5).map(x => x[0]);
   const grid = {}; let mx = 1;
   rows.forEach(r => { const k = r.type + '|' + r.day; grid[k] = (grid[k] || 0) + 1; mx = Math.max(mx, grid[k]); });
-  let h = `<p class="lab">Effets selon le jour d’injection</p><div class="card chart-card"><div class="heat" style="--n:${n}"><span></span>${Array.from({ length: n }, (_, i) => `<span class="hd">J${i + 1}</span>`).join('')}`;
+  let h = `<h2 class="h2">Effets selon le jour</h2><div class="card chart-card"><div class="heat" style="--n:${n}"><span></span>${Array.from({ length: n }, (_, i) => `<span class="hd">J${i + 1}</span>`).join('')}`;
   types.forEach(ty => { h += `<span class="lb">${emo(ty)} ${esc(ty)}</span>`; for (let d = 1; d <= n; d++) { const v = grid[ty + '|' + d] || 0; h += `<span class="c" style="animation-delay:${(d * 35 + types.indexOf(ty) * 60)}ms;${v ? `background:color-mix(in srgb,var(--ress) ${Math.round(18 + 70 * v / mx)}%,var(--fill2))` : ''}">${v || ''}</span>`; } });
   h += `</div><p class="foot-note" style="margin:8px 0 0">J1 = jour de l’injection. Chiffre = nombre de fois où tu l’as noté (4 derniers mois).</p>`;
   const ins = [];
@@ -921,7 +948,7 @@ function vMore() {
   <p class="lab" style="margin-top:4px">Consultation</p>
   <div class="group">
     ${rowA('appt', 'cal', 'Prochain rendez-vous', `<span class="muted">${S.appt ? short(S.appt) : 'Aucun'}</span>`)}
-    ${rowA('questions', 'question', 'Mes questions pour le médecin', open ? `<span class="badge">${open}</span>` : '')}
+    ${rowA('questions', 'question', 'Mes questions', open ? `<span class="badge">${open}</span>` : '')}
     ${rowA('report', 'print', 'Rapport pour le médecin')}
   </div>
   <p class="lab">Traitement</p>
@@ -944,12 +971,7 @@ function vMore() {
   </div>
   <p class="lab">Profil</p>
   <div class="group">
-    <div class="frow"><label for="p-name">Prénom</label><input id="p-name" data-prof="name" value="${esc(S.profile.name)}" placeholder="Facultatif" autocomplete="given-name" enterkeyhint="done"></div>
-    <div class="frow"><label for="p-height">Taille</label><input id="p-height" data-prof="height" inputmode="decimal" value="${esc(S.profile.height)}" placeholder="–" enterkeyhint="done"><span class="unit">cm</span></div>
-    <div class="frow"><label for="p-goal">Objectif de poids</label><input id="p-goal" data-prof="goal" inputmode="decimal" value="${esc(S.profile.goal)}" placeholder="–" enterkeyhint="done"><span class="unit">kg</span></div>
-    <div class="frow"><label for="p-max">Fourchette de maintien, max.</label><input id="p-max" data-prof="maintMax" inputmode="decimal" value="${esc(S.profile.maintMax)}" placeholder="–" enterkeyhint="done"><span class="unit">kg</span></div>
-    <button class="trow" data-act="toggle" data-id="hideWeight" role="switch" aria-checked="${S.settings.hideWeight}"><span>Masquer les chiffres de poids<small>Pour suivre tes habitudes sans la pression de la balance.</small></span><i class="switch"></i></button>
-    <button class="trow" data-act="toggle" data-id="female" role="switch" aria-checked="${S.settings.female}"><span>Infos cycle et contraception<small>Affiche les rappels de la notice liés à la pilule et au cycle.</small></span><i class="switch"></i></button>
+    <button class="row has-ic" data-act="profileSheet"><span class="bubble" style="--c:var(--inj)">${cadi({ size: 34, act: '' })}</span><span class="t"><b style="font-weight:500">${S.profile.name ? esc(S.profile.name) : 'Mon profil'}</b><span>${[S.profile.height ? fr(num(S.profile.height)) + ' cm' : '', S.profile.goal ? 'objectif ' + esc(S.profile.goal) + ' kg' : '', S.settings.hideWeight ? 'poids masqué' : ''].filter(Boolean).join(', ') || 'Taille, objectif, préférences'}</span></span>${ic('chev', 'chev')}</button>
   </div>
   <p class="lab">Mes données</p>
   <div class="group">
@@ -1012,18 +1034,21 @@ function toast(m, err, undo) {
 
 function fFab() {
   const t = T(focusT) || active()[0], st = t ? status(t) : {}, w = weightsAsc().pop();
-  const r = (act, icon, color, title, sub, id = '') => `<button class="add-row" data-act="${act}"${id ? ` data-id="${id}"` : ''}><span class="bubble" style="--c:${color}">${ic(icon)}</span><span><b>${title}</b><span>${sub}</span></span></button>`;
   document.body.classList.add('fab-open'); haptic();
+  const tile = (act, icon, color, title, sub, id = '') => `<button class="fab-tile" data-act="${act}"${id ? ` data-id="${id}"` : ''} style="--c:${color}"><span class="bubble">${ic(icon)}</span><b>${title}</b><span>${sub}</span></button>`;
+  const injSub = !t ? 'Ajoute un traitement' : st.last ? (st.dueIn < 0 ? `En retard de ${-st.dueIn} j` : st.dueIn === 0 ? 'Prévue aujourd’hui' : `Dans ${st.dueIn} j`) : 'La première';
   const fabEl = openSheet({
-    title: 'Ajouter', small: true, body: `<div class="group">
-    ${r('newInj', 'pen', t ? esc(t.color) : 'var(--inj)', 'Injection', !t ? 'Ajoute d’abord un traitement' : st.last ? (st.dueIn < 0 ? 'En retard de ' + (-st.dueIn) + ' j' : st.dueIn === 0 ? 'Prévue aujourd’hui' : 'Prochaine ' + relDay(new Date(st.due))) : 'Note ta première injection')}
-    ${r('newS', 'face', 'var(--ress)', 'Ressenti', 'Effets, appétit, énergie, humeur')}
-    ${r('hab', 'egg', 'var(--prot)', 'Protéines, eau, fibres', `Aujourd’hui : ${habFmt('p', intake('p'))} de protéines, ${habFmt('w', intake('w'))}`, 'p')}
-    ${r('newW', 'scale', 'var(--poids)', 'Poids', w && !hidden() ? 'Dernière pesée : ' + fr1(w.kg) + ' kg, ' + relDay(w.date) : 'Note ta pesée')}
-    ${r('newM', 'ruler', 'var(--poids)', 'Mensurations', 'Tour de taille, hanches, masse maigre')}
-    ${r('addPhoto', 'camera', 'var(--niv)', 'Photo de suivi', 'Reste sur ton téléphone', 'body')}
-    ${r('questions', 'question', 'var(--inj)', 'Question pour le médecin', 'À garder pour ton prochain rendez-vous')}
-  </div>` });
+    title: 'Noter', small: true, body: `<p class="lab">Au quotidien</p><div class="fab-grid">
+      ${tile('newInj', 'pen', t ? esc(t.color) : 'var(--inj)', 'Injection', injSub)}
+      ${tile('newS', 'face', 'var(--ress)', 'Ressenti', 'Effets, humeur')}
+      ${tile('hab', 'egg', 'var(--prot)', 'Habitudes', 'Protéines, eau, fibres', 'p')}
+      ${tile('newW', 'scale', 'var(--poids)', 'Poids', w && !hidden() ? `Dernier : ${fr1(w.kg)} kg` : 'Ta pesée')}
+    </div>
+    <p class="lab">De temps en temps</p><div class="group">
+      <button class="row has-ic" data-act="newM"><span class="bubble" style="--c:var(--poids)">${ic('ruler')}</span><span class="t"><b style="font-weight:500">Mensurations</b><span>Tour de taille, hanches, masse maigre</span></span>${ic('chev', 'chev')}</button>
+      <button class="row has-ic" data-act="addPhoto" data-id="body"><span class="bubble" style="--c:var(--niv)">${ic('camera')}</span><span class="t"><b style="font-weight:500">Photo de suivi</b><span>Elle reste sur ton téléphone</span></span>${ic('chev', 'chev')}</button>
+      <button class="row has-ic" data-act="questions"><span class="bubble" style="--c:var(--inj)">${ic('question')}</span><span class="t"><b style="font-weight:500">Question pour le médecin</b><span>Pour ton prochain rendez-vous</span></span>${ic('chev', 'chev')}</button>
+    </div>` });
   fabEl.dataset.fab = '1';
 }
 
@@ -1176,6 +1201,18 @@ function fGoals() {
         <li><b>Fibres :</b> l’ANSES recommande 30 g par jour pour les adultes, à atteindre progressivement.</li>
         <li><b>Eau :</b> pas de chiffre unique ; bois régulièrement, davantage en cas de nausées, de diarrhée ou de chaleur.</li></ul></div>`
   });
+}
+
+function fProfile() {
+  openSheet({ title: 'Mon profil', left: 'Fermer', body: `<p class="lab">Moi</p><div class="group">
+    <div class="frow"><label for="p-name">Prénom</label><input id="p-name" data-prof="name" value="${esc(S.profile.name)}" placeholder="Facultatif" autocomplete="given-name" enterkeyhint="done"></div>
+    <div class="frow"><label for="p-height">Taille</label><input id="p-height" data-prof="height" inputmode="decimal" value="${esc(S.profile.height)}" placeholder="–" enterkeyhint="done"><span class="unit">cm</span></div>
+    <div class="frow"><label for="p-goal">Objectif de poids</label><input id="p-goal" data-prof="goal" inputmode="decimal" value="${esc(S.profile.goal)}" placeholder="–" enterkeyhint="done"><span class="unit">kg</span></div>
+    <div class="frow"><label for="p-max">Fourchette de maintien, max.</label><input id="p-max" data-prof="maintMax" inputmode="decimal" value="${esc(S.profile.maintMax)}" placeholder="–" enterkeyhint="done"><span class="unit">kg</span></div>
+    <button class="trow" data-act="toggle" data-id="hideWeight" role="switch" aria-checked="${S.settings.hideWeight}"><span>Masquer les chiffres de poids<small>Pour suivre tes habitudes sans la pression de la balance.</small></span><i class="switch"></i></button>
+    <button class="trow" data-act="toggle" data-id="female" role="switch" aria-checked="${S.settings.female}"><span>Infos cycle et contraception<small>Affiche les rappels de la notice liés à la pilule et au cycle.</small></span><i class="switch"></i></button>
+  </div>
+    <p class="foot-note">La taille sert au calcul de l’IMC. La fourchette de maintien sert quand tous tes traitements sont arrêtés.</p>` });
 }
 
 /* Consultation : rendez-vous, questions, rapport */
@@ -1522,7 +1559,7 @@ const A = {
   costs() { closeAllThen(fCosts); },
   info(id) { fInfo(id); },
   report() { closeAllThen(() => openReport()); },
-  profile() { tab = 'more'; render(); setTimeout(() => { const i = $('#p-max'); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } }, 50); },
+  profile() { closeAllThen(() => { fProfile(); setTimeout(() => { const i = q('#p-max'); i && i.focus(); }, 450); }); },
   peek() { peek = true; render(); },
   dismiss(k, el) { collapse(el && el.closest('.alert'), () => { S.dismissed[k] = true; save(); render(); }); },
   toggle(k, el) { S.settings[k] = !S.settings[k]; peek = false; save(); haptic(); if (el) el.setAttribute('aria-checked', S.settings[k]); setTimeout(render, REDUCED ? 0 : 260); },
@@ -1533,7 +1570,12 @@ const A = {
     if (cadiTaps % 3 === 0) { el.dataset.after = ex; say(tx, el.dataset.expr); } else say(tx, ex);
   },
   cadiPoke(id, el) { haptic(); cadiSpin(el); },
-  streak(id) { tabDir = 1; tab = 'progress'; animIn = true; tabPop = true; focusT = id; render(); setTimeout(() => { const e = $('#cadence-sec'); if (e) scrollTo({ top: e.getBoundingClientRect().top + scrollY - 70, behavior: REDUCED ? 'auto' : 'smooth' }); }, 60); },
+  streak(id) { tabDir = 1; tab = 'progress'; progSec = 'trait'; animIn = true; tabPop = true; focusT = id; render(); setTimeout(() => { const e = $('#cadence-sec'); if (e) scrollTo({ top: e.getBoundingClientRect().top + scrollY - 70, behavior: REDUCED ? 'auto' : 'smooth' }); }, 60); },
+  note(k) { fNote(k); },
+  notesAll() { const t = T(focusT), L = collectNotes(t, t ? status(t) : null); openSheet({ title: 'Rappels', left: 'Fermer', body: `<div class="group notes" style="margin-top:6px">${L.map(o => `<button class="row has-ic note" data-act="note" data-id="${esc(o.key)}">${o.cadi ? cadi({ size: 42, expr: o.cadi, act: '' }) : `<span class="bubble" style="--c:${o.color}">${ic(o.icon)}</span>`}<span class="t"><b>${esc(o.title)}</b><span>${esc(o.sub)}</span></span>${ic('chev', 'chev')}</button>`).join('')}</div>` }); },
+  dismissNote(k) { S.dismissed[k] = true; save(); while (stack.length) closeSheet(); render(); toast('Rappel masqué'); },
+  goProg(sec) { tabDir = 1; tab = 'progress'; progSec = sec; animIn = true; tabPop = true; render(); scrollTo(0, 0); },
+  profileSheet() { closeAllThen(fProfile); },
   replayRing(id) { PREV.delete('ring:' + id); PREV.delete('late:' + id); firstHome = true; haptic(); render(); },
   quickW(id, el) { const pt = center(el), bub = center(el && el.closest('.hab') && el.closest('.hab').querySelector('.bubble')); pop(el, 1.2); haptic(); const it = addIntake('w', 250, 'Verre'); render(); floatText(pt, '+250 mL', 'var(--eau)'); toast(`${habFmt('w', intake('w'))} d’eau aujourd’hui`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); goalCheck(it, bub || pt); },
   quickS(id, el) { const pt = center(el), bub = center(el && el.closest('.hab') && el.closest('.hab').querySelector('.bubble')); pop(el, 1.2); haptic(); const it = addIntake('s', 1, 'Séance de renforcement'); render(); floatText(pt, '+1 séance', 'var(--renfo)'); toast(`${sessionsWeek()} séance${sessionsWeek() > 1 ? 's' : ''} cette semaine`, false, () => { S.intake = S.intake.filter(x => x.id !== it.id); save(); render(); }); goalCheck(it, bub || pt); },
@@ -1654,7 +1696,7 @@ async function give(name, data, type) {
 }
 
 /* ---------- Événements ---------- */
-const SEL = '[data-act],[data-close],[data-tab],[data-focus],[data-jf],[data-range],[data-entry],[data-dose],[data-site],[data-feel],[data-lvl],[data-color],[data-injt],[data-preset],[data-obp],[data-obdose],[data-oblast],[data-add],[data-habk],[data-repd]';
+const SEL = '[data-psec],[data-act],[data-close],[data-tab],[data-focus],[data-jf],[data-range],[data-entry],[data-dose],[data-site],[data-feel],[data-lvl],[data-color],[data-injt],[data-preset],[data-obp],[data-obdose],[data-oblast],[data-add],[data-habk],[data-repd]';
 document.addEventListener('click', e => {
   if (e.target.closest('#say')) return hideSay();
   const el = e.target.closest(SEL); if (!el) return;
@@ -1671,6 +1713,7 @@ document.addEventListener('click', e => {
   if (d.focus) { focusT = d.focus; firstHome = true; render(); return; }
   if (d.jf) { jFilter = d.jf; animIn = true; render(); return; }
   if (d.range !== undefined) { range = +d.range; animIn = true; render(); return; }
+  if (d.psec) { if (d.psec === progSec) return; const o = ['trait', 'poids', 'bien']; tabDir = o.indexOf(d.psec) > o.indexOf(progSec) ? 1 : -1; progSec = d.psec; animIn = true; render(); scrollTo(0, 0); return; }
   if (d.repd !== undefined) { openReport(+d.repd); return; }
   if (d.entry) { const [k, id] = d.entry.split(':'); return fEntry(k, id); }
   if (d.habk) { const b = q('.body'); b.innerHTML = habBody(d.habk); animateCounts(b); syncSegs(b); if (!REDUCED) b.querySelector('[style*="--c"]').animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.2,.8,.2,1)' }); return; }
@@ -1725,7 +1768,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', async e => {
   const el = e.target;
-  if (el.dataset.prof) { S.profile[el.dataset.prof] = el.value.trim(); save(); toast('Profil enregistré'); return; }
+  if (el.dataset.prof) { S.profile[el.dataset.prof] = el.value.trim(); save(); render(); toast('Profil enregistré'); return; }
   if (el.dataset.ob) { ob[el.dataset.ob] = el.value; return obCta(); }
   if (el.id === 'rx') { S.rxEnd = el.value; save(); render(); toast('Date enregistrée'); return; }
   if (el.id === 'i-date') { const v = el.value; q('#i-when').textContent = !v || Math.abs(D(v) - Date.now()) < 3 * 6e4 ? 'Maintenant' : cap(relDay(v)) + ' à ' + tfmt(v); return; }

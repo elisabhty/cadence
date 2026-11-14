@@ -745,3 +745,44 @@ button.streak:active{transform:scale(.985)}
 .page.anim .streak .badges span.on{animation:popin .45s .5s cubic-bezier(.3,1.6,.5,1) both}
 .streak .sumrow>span b{font-family:var(--round)}
 .streak .sumrow>span>span{display:block;font-size:12.5px;color:var(--label2)}
+
+/* =========================================================
+   Clarté : héros simplifié, rappels courts, menu + en grille
+   ========================================================= */
+.hero .when{font-size:18px;margin-top:2px}
+.hchips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:10px 0 16px}
+.hchip{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border-radius:15px;background:var(--fill2);font-size:14px;font-weight:600;color:var(--label);white-space:nowrap}
+.hchip .ic{width:15px;height:15px;color:var(--c);stroke-width:2.2}
+button.hchip:active{transform:scale(.95)}
+.hchip.warn{background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red)}
+.hchip.warn .ic{color:var(--red)}
+.hero .acts .btn.tint{color:var(--c)}
+.hero-cad{display:flex;align-items:center;gap:10px;width:calc(100% + 36px);margin:16px -18px -18px;padding:13px 18px;text-align:left;box-shadow:inset 0 .5px 0 var(--sep);border-radius:0 0 var(--r) var(--r);font-size:14.5px;color:var(--label2)}
+.hero-cad:active{background:var(--fill2)}
+.hero-cad b{color:var(--label);font-weight:600}
+.hero-cad .tx{flex:1;min-width:0}
+.hero-cad .mini{display:flex;gap:3px;flex:none}
+.hero-cad .mini i{width:13px;height:8px;border-radius:4px;background:var(--inj)}
+.hero-cad .mini i.late{background:var(--ress)}
+.hero-cad .mini i.old{opacity:.3}
+.hero-cad .chev{width:14px;height:14px;color:var(--label3);stroke-width:2.6}
+.notes .note .cadi{margin:-4px -4px -4px -6px}
+.notes .note .t span{white-space:normal}
+.note-more{justify-content:space-between;color:var(--inj);font-weight:500;font-size:15px}
+.seg-main{margin-bottom:4px}
+.seg-main button{min-height:34px;font-size:14px}
+.seg-sub{margin-top:14px}
+.fab-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fab-tile{background:var(--sheet-card);border-radius:16px;padding:14px 14px 13px;text-align:left;display:flex;flex-direction:column;gap:2px;min-height:112px;transition:transform .12s}
+.fab-tile:active{transform:scale(.96)}
+.fab-tile .bubble{width:38px;height:38px;border-radius:11px;margin-bottom:auto}
+.fab-tile .bubble .ic{width:21px;height:21px}
+.fab-tile b{font-size:16.5px;font-weight:600;margin-top:12px}
+.fab-tile span:not(.bubble){font-size:13px;color:var(--label2)}
+.sheet.fresh .fab-grid .fab-tile{animation:popin .4s cubic-bezier(.3,1.5,.5,1) both}
+.sheet.fresh .fab-grid .fab-tile:nth-child(2){animation-delay:.04s}.sheet.fresh .fab-grid .fab-tile:nth-child(3){animation-delay:.08s}.sheet.fresh .fab-grid .fab-tile:nth-child(4){animation-delay:.12s}
+.hero .when-l{font-size:13px;font-weight:600;color:var(--label2);margin-top:2px}
+.hero .when{font-size:21px;font-weight:700;letter-spacing:-.01em;margin-top:1px}
+.ring.late~.when{color:var(--red)}
+.chart .pt{transform-box:fill-box;transform-origin:center}
+.streak .big{margin-top:2px}
